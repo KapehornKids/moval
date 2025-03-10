@@ -1,16 +1,15 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Users, UserCheck, Calendar, Building, Coins, Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import Layout from "@/components/layout/Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Layout from "@/components/layout/Layout";
 import {
   Form,
   FormControl,
@@ -18,38 +17,13 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Building2, Users, Calendar, BadgeDollarSign } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { CardCustom, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card-custom";
 
-// Election form schema
-const electionFormSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  positionType: z.string().min(1, "Position type is required"),
-  startDate: z.string().min(1, "Start date is required"),
-  endDate: z.string().min(1, "End date is required"),
-});
-
-// Conversion rate form schema
-const conversionFormSchema = z.object({
-  rate: z.string().refine(
+const conversionRateSchema = z.object({
+  movalToRupeeRate: z.string().refine(
     (val) => {
       const num = parseFloat(val);
       return !isNaN(num) && num > 0;
@@ -58,325 +32,420 @@ const conversionFormSchema = z.object({
   ),
 });
 
-// User type
-type User = {
-  id: string;
-  name: string;
-  role: string;
-};
+const electionSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  description: z.string().optional(),
+  positionType: z.string().min(3, "Position type is required"),
+  startDate: z.string().refine(val => !!val, { message: "Start date is required" }),
+  endDate: z.string().refine(val => !!val, { message: "End date is required" }),
+});
 
-const Association = () => {
+const AssociationPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("elections");
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [electionLoading, setElectionLoading] = useState(false);
-  const [conversionLoading, setConversionLoading] = useState(false);
-  const [currentRate, setCurrentRate] = useState<number | null>(null);
-
-  const electionForm = useForm<z.infer<typeof electionFormSchema>>({
-    resolver: zodResolver(electionFormSchema),
+  const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [roleType, setRoleType] = useState<"banker" | "justice_department">("banker");
+  const [currentConversionRate, setCurrentConversionRate] = useState<number | null>(null);
+  const [updatingRate, setUpdatingRate] = useState(false);
+  const [creatingElection, setCreatingElection] = useState(false);
+  
+  const conversionForm = useForm<z.infer<typeof conversionRateSchema>>({
+    resolver: zodResolver(conversionRateSchema),
+    defaultValues: {
+      movalToRupeeRate: "",
+    },
+  });
+  
+  const electionForm = useForm<z.infer<typeof electionSchema>>({
+    resolver: zodResolver(electionSchema),
     defaultValues: {
       title: "",
       description: "",
-      positionType: "association_member",
-      startDate: new Date().toISOString().split("T")[0],
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      positionType: "",
+      startDate: "",
+      endDate: "",
     },
   });
-
-  const conversionForm = useForm<z.infer<typeof conversionFormSchema>>({
-    resolver: zodResolver(conversionFormSchema),
-    defaultValues: {
-      rate: "",
-    },
-  });
-
+  
   useEffect(() => {
-    // Check if user is an association member
-    if (user && user.role === "association_member") {
-      fetchUsers();
-      fetchCurrentRate();
-    } else {
-      navigate("/dashboard");
-      toast.error("You don't have permission to access this page");
-    }
-  }, [user, navigate]);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
+    const fetchData = async () => {
+      if (!user) return;
       
-      // Get all users from the database
-      const { data: authUsers, error: authError } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name');
-      
-      if (authError) throw authError;
-      
-      // Get user roles
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-      
-      if (rolesError) throw rolesError;
-      
-      // Map the users with their roles
-      const mappedUsers = authUsers.map(profile => {
-        const roleData = userRoles.find(r => r.user_id === profile.id);
-        return {
-          id: profile.id,
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'User',
-          role: (roleData?.role || 'user') as string
-        };
-      });
-      
-      setUsers(mappedUsers);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      toast.error("Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCurrentRate = async () => {
-    try {
-      // Get the latest conversion rate
-      const { data, error } = await supabase
-        .from('conversion_rates')
-        .select('moval_to_rupee_rate')
-        .order('effective_from', { ascending: false })
-        .limit(1);
-      
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        setCurrentRate(data[0].moval_to_rupee_rate);
-        conversionForm.setValue('rate', data[0].moval_to_rupee_rate.toString());
+      try {
+        const hasRole = await checkUserRole("association_member");
+        
+        if (!hasRole) {
+          toast.error("You don't have permission to access this page");
+          navigate("/dashboard");
+          return;
+        }
+        
+        // Fetch all users
+        const { data: usersData, error: usersError } = await supabase
+          .from("profiles")
+          .select(`
+            id,
+            first_name,
+            last_name,
+            user_roles (
+              role
+            )
+          `);
+          
+        if (usersError) throw usersError;
+        
+        // Fetch current conversion rate
+        const { data: rateData, error: rateError } = await supabase
+          .from("conversion_rates")
+          .select("moval_to_rupee_rate")
+          .order("effective_from", { ascending: false })
+          .limit(1)
+          .single();
+          
+        if (!rateError && rateData) {
+          setCurrentConversionRate(rateData.moval_to_rupee_rate);
+          conversionForm.setValue("movalToRupeeRate", rateData.moval_to_rupee_rate.toString());
+        }
+        
+        setUsers(usersData || []);
+        
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load data");
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching conversion rate:", error);
-      toast.error("Failed to load current conversion rate");
-    }
-  };
-
-  const onCreateElection = async (values: z.infer<typeof electionFormSchema>) => {
-    if (!user) return;
+    };
+    
+    fetchData();
+  }, [user, navigate]);
+  
+  const checkUserRole = async (role: "user" | "association_member" | "banker" | "justice_department") => {
+    if (!user) return false;
     
     try {
-      setElectionLoading(true);
-      
-      // Create a new election
-      const { error } = await supabase
-        .from('elections')
-        .insert({
-          title: values.title,
-          description: values.description,
-          position_type: values.positionType,
-          start_date: new Date(values.startDate).toISOString(),
-          end_date: new Date(values.endDate).toISOString(),
-          status: 'active'
-        });
-      
-      if (error) throw error;
-      
-      toast.success("Election created successfully");
-      electionForm.reset({
-        title: "",
-        description: "",
-        positionType: "association_member",
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      const { data, error } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: role
       });
-    } catch (error) {
-      console.error("Error creating election:", error);
-      toast.error("Failed to create election");
-    } finally {
-      setElectionLoading(false);
-    }
-  };
-
-  const updateUserRole = async (userId: string, newRole: string) => {
-    try {
-      // Update the user role in the database
-      const { error } = await supabase
-        .from('user_roles')
-        .update({ role: newRole })
-        .eq('user_id', userId);
       
       if (error) throw error;
-      
-      // Update the local state
-      setUsers(users.map(u => 
-        u.id === userId ? { ...u, role: newRole } : u
-      ));
-      
-      toast.success("User role updated successfully");
+      return data;
     } catch (error) {
-      console.error("Error updating user role:", error);
-      toast.error("Failed to update user role");
+      console.error("Error checking role:", error);
+      return false;
     }
   };
-
-  const onUpdateConversionRate = async (values: z.infer<typeof conversionFormSchema>) => {
-    if (!user) return;
+  
+  const handleUserSelect = (userId: string) => {
+    setSelectedUser(userId === selectedUser ? null : userId);
+  };
+  
+  const assignRole = async () => {
+    if (!selectedUser || !user) return;
     
     try {
-      setConversionLoading(true);
+      // First check if user already has this role
+      const { data: existingRole, error: roleCheckError } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", selectedUser)
+        .eq("role", roleType)
+        .maybeSingle();
+        
+      if (roleCheckError) throw roleCheckError;
       
-      const rate = parseFloat(values.rate);
+      if (existingRole) {
+        toast.info(`User already has the ${roleType} role`);
+        return;
+      }
       
-      // Create a new conversion rate
+      // Assign the new role
+      const { error: insertError } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: selectedUser,
+          role: roleType as "user" | "association_member" | "banker" | "justice_department"
+        });
+        
+      if (insertError) throw insertError;
+      
+      toast.success(`Successfully assigned ${roleType} role`);
+      
+      // Refresh user list
+      const { data: usersData, error: usersError } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          first_name,
+          last_name,
+          user_roles (
+            role
+          )
+        `);
+        
+      if (usersError) throw usersError;
+      setUsers(usersData || []);
+      
+    } catch (error) {
+      console.error("Error assigning role:", error);
+      toast.error("Failed to assign role");
+    }
+  };
+  
+  const updateConversionRate = async (data: z.infer<typeof conversionRateSchema>) => {
+    if (!user) return;
+    
+    setUpdatingRate(true);
+    
+    try {
+      const rate = parseFloat(data.movalToRupeeRate);
+      
       const { error } = await supabase
-        .from('conversion_rates')
+        .from("conversion_rates")
         .insert({
           moval_to_rupee_rate: rate,
-          created_by: user.id,
-          effective_from: new Date().toISOString()
+          created_by: user.id
         });
-      
+        
       if (error) throw error;
       
-      setCurrentRate(rate);
+      setCurrentConversionRate(rate);
       toast.success("Conversion rate updated successfully");
+      
     } catch (error) {
       console.error("Error updating conversion rate:", error);
       toast.error("Failed to update conversion rate");
     } finally {
-      setConversionLoading(false);
+      setUpdatingRate(false);
     }
   };
-
-  const appointBanker = async (userId: string) => {
+  
+  const createElection = async (data: z.infer<typeof electionSchema>) => {
+    if (!user) return;
+    
+    setCreatingElection(true);
+    
     try {
-      // Check if user is already a banker
-      const user = users.find(u => u.id === userId);
-      if (user && user.role === "banker") {
-        toast.error("This user is already appointed as a banker");
-        return;
-      }
+      const { error } = await supabase
+        .from("elections")
+        .insert({
+          title: data.title,
+          description: data.description || null,
+          position_type: data.positionType,
+          start_date: new Date(data.startDate).toISOString(),
+          end_date: new Date(data.endDate).toISOString(),
+          status: "upcoming"
+        });
+        
+      if (error) throw error;
       
-      // Update the user role to banker
-      await updateUserRole(userId, "banker");
+      toast.success("Election created successfully");
+      electionForm.reset();
       
-      toast.success("User appointed as banker successfully");
     } catch (error) {
-      console.error("Error appointing banker:", error);
-      toast.error("Failed to appoint banker");
+      console.error("Error creating election:", error);
+      toast.error("Failed to create election");
+    } finally {
+      setCreatingElection(false);
     }
   };
-
-  if (loading) {
+  
+  if (isLoading) {
     return (
       <Layout>
         <div className="container py-8">
-          <h1 className="text-2xl font-bold mb-6 flex items-center">
-            <Building2 className="mr-2" /> Association Management
-          </h1>
-          <p>Loading...</p>
+          <div className="flex justify-center items-center h-64">
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
         </div>
       </Layout>
     );
   }
-
+  
   return (
     <Layout>
       <div className="container py-8">
-        <h1 className="text-2xl font-bold mb-6 flex items-center">
-          <Building2 className="mr-2" /> Association Management
-        </h1>
+        <h1 className="text-3xl font-bold mb-8">Association Management</h1>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="elections">Elections</TabsTrigger>
-            <TabsTrigger value="bankers">Appoint Banker</TabsTrigger>
-            <TabsTrigger value="conversion">Currency Conversion</TabsTrigger>
+        <Tabs defaultValue="members">
+          <TabsList className="mb-8">
+            <TabsTrigger value="members" className="flex items-center">
+              <Users size={16} className="mr-2" />
+              <span>Assign Roles</span>
+            </TabsTrigger>
+            <TabsTrigger value="conversion" className="flex items-center">
+              <Coins size={16} className="mr-2" />
+              <span>Conversion Rate</span>
+            </TabsTrigger>
+            <TabsTrigger value="elections" className="flex items-center">
+              <Calendar size={16} className="mr-2" />
+              <span>Elections</span>
+            </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="elections">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Calendar className="mr-2" /> Create New Election
-                </CardTitle>
-                <CardDescription>
-                  Set up a new election for association members or justice department
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...electionForm}>
-                  <form
-                    onSubmit={electionForm.handleSubmit(onCreateElection)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={electionForm.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Election Title</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. Q3 Association Member Election" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={electionForm.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Details about the election" 
-                              className="min-h-20"
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={electionForm.control}
-                      name="positionType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Position Type</FormLabel>
-                          <Select 
-                            onValueChange={field.onChange} 
-                            defaultValue={field.value}
+          <TabsContent value="members">
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="md:col-span-2">
+                <CardCustom>
+                  <CardHeader>
+                    <CardTitle>Society Members</CardTitle>
+                    <CardDescription>
+                      Assign banker or justice department roles to members
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {users.length > 0 ? (
+                        users.map((user) => (
+                          <div 
+                            key={user.id}
+                            className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${selectedUser === user.id ? 'bg-primary/10' : 'hover:bg-accent'}`}
+                            onClick={() => handleUserSelect(user.id)}
                           >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select position type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="association_member">Association Member</SelectItem>
-                              <SelectItem value="justice_department">Justice Department</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
+                            <div className="flex items-center">
+                              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-4">
+                                {user.first_name?.[0] || ''}
+                                {user.last_name?.[0] || ''}
+                              </div>
+                              <div>
+                                <h3 className="font-medium">{user.first_name} {user.last_name}</h3>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {user.user_roles?.map((role: any, idx: number) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                                      {role.role}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            {selectedUser === user.id && (
+                              <UserCheck size={20} className="text-primary" />
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-muted-foreground">No users found</p>
                       )}
-                    />
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+                  </CardContent>
+                </CardCustom>
+              </div>
+              
+              <div>
+                <CardCustom>
+                  <CardHeader>
+                    <CardTitle>Assign Role</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex flex-col space-y-2">
+                        <label className="text-sm font-medium">Role Type</label>
+                        <div className="flex space-x-2">
+                          <Button
+                            type="button"
+                            variant={roleType === "banker" ? "default" : "outline"}
+                            onClick={() => setRoleType("banker")}
+                            className="flex-1"
+                          >
+                            <Building size={16} className="mr-2" />
+                            Banker
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={roleType === "justice_department" ? "default" : "outline"}
+                            onClick={() => setRoleType("justice_department")}
+                            className="flex-1"
+                          >
+                            <Settings size={16} className="mr-2" />
+                            Justice
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button 
+                      className="w-full" 
+                      disabled={!selectedUser}
+                      onClick={assignRole}
+                    >
+                      Assign Role
+                    </Button>
+                  </CardFooter>
+                </CardCustom>
+              </div>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="conversion">
+            <div className="max-w-md mx-auto">
+              <CardCustom>
+                <CardHeader>
+                  <CardTitle>Moval to Rupee Conversion Rate</CardTitle>
+                  <CardDescription>
+                    Set the current conversion rate between Movals and rupees
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...conversionForm}>
+                    <form className="space-y-4" onSubmit={conversionForm.handleSubmit(updateConversionRate)}>
                       <FormField
-                        control={electionForm.control}
-                        name="startDate"
+                        control={conversionForm.control}
+                        name="movalToRupeeRate"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Start Date</FormLabel>
+                            <FormLabel>1 Moval = ? Rupees</FormLabel>
                             <FormControl>
-                              <Input type="date" {...field} />
+                              <Input placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      {currentConversionRate && (
+                        <div className="text-sm text-muted-foreground">
+                          Current rate: 1 Moval = {currentConversionRate} Rupees
+                        </div>
+                      )}
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full"
+                        disabled={updatingRate}
+                      >
+                        {updatingRate ? "Updating..." : "Update Rate"}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </CardCustom>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="elections">
+            <div className="max-w-md mx-auto">
+              <CardCustom>
+                <CardHeader>
+                  <CardTitle>Create New Election</CardTitle>
+                  <CardDescription>
+                    Set up a new election for society positions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...electionForm}>
+                    <form className="space-y-4" onSubmit={electionForm.handleSubmit(createElection)}>
+                      <FormField
+                        control={electionForm.control}
+                        name="title"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Election Title</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Spring 2023 Elections" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -385,159 +454,74 @@ const Association = () => {
                       
                       <FormField
                         control={electionForm.control}
-                        name="endDate"
+                        name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>End Date</FormLabel>
+                            <FormLabel>Description (Optional)</FormLabel>
                             <FormControl>
-                              <Input type="date" {...field} />
+                              <Input placeholder="Election details..." {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                    </div>
-                    
-                    <Button
-                      type="submit"
-                      className="w-full mt-2"
-                      disabled={electionLoading}
-                    >
-                      {electionLoading ? "Creating..." : "Create Election"}
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="bankers">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="mr-2" /> Appoint Banker
-                </CardTitle>
-                <CardDescription>
-                  Appoint a user to the banker role to manage currency conversion
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {users
-                    .filter(u => u.role !== "banker")
-                    .map(user => (
-                      <div 
-                        key={user.id}
-                        className="flex items-center justify-between p-4 border rounded-md hover:bg-gray-50"
-                      >
-                        <div>
-                          <h3 className="font-medium">{user.name}</h3>
-                          <p className="text-sm text-gray-500">Current role: {user.role.replace('_', ' ')}</p>
-                        </div>
-                        <Button 
-                          onClick={() => appointBanker(user.id)} 
-                          variant="outline"
-                        >
-                          Appoint as Banker
-                        </Button>
+                      
+                      <FormField
+                        control={electionForm.control}
+                        name="positionType"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Position Type</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Association Member" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={electionForm.control}
+                          name="startDate"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Start Date</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={electionForm.control}
+                          name="endDate"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>End Date</FormLabel>
+                              <FormControl>
+                                <Input type="date" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                    ))}
-                  
-                  {users.filter(u => u.role !== "banker").length === 0 && (
-                    <p className="text-center py-4 text-gray-500">No eligible users found</p>
-                  )}
-                </div>
-              </CardContent>
-              <CardFooter className="flex-col items-start">
-                <h3 className="font-medium mb-2">Current Bankers</h3>
-                <div className="w-full">
-                  {users
-                    .filter(u => u.role === "banker")
-                    .map(user => (
-                      <div 
-                        key={user.id}
-                        className="flex items-center justify-between p-3 border rounded-md mb-2 bg-green-50"
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full"
+                        disabled={creatingElection}
                       >
-                        <span className="font-medium">{user.name}</span>
-                        <Button 
-                          onClick={() => updateUserRole(user.id, "user")} 
-                          variant="ghost" 
-                          size="sm"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  
-                  {users.filter(u => u.role === "banker").length === 0 && (
-                    <p className="text-center py-2 text-gray-500">No bankers appointed</p>
-                  )}
-                </div>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="conversion">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <BadgeDollarSign className="mr-2" /> Moval Currency Conversion
-                </CardTitle>
-                <CardDescription>
-                  Set the conversion rate between Movals and rupees
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-6 p-4 bg-gray-50 rounded-md">
-                  <h3 className="font-medium mb-1">Current Conversion Rate</h3>
-                  <p className="text-2xl font-bold">
-                    {currentRate !== null ? (
-                      <>1 Moval = {currentRate} Rupees</>
-                    ) : (
-                      "No conversion rate set"
-                    )}
-                  </p>
-                </div>
-                
-                <Form {...conversionForm}>
-                  <form
-                    onSubmit={conversionForm.handleSubmit(onUpdateConversionRate)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={conversionForm.control}
-                      name="rate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>New Conversion Rate (Rupees per Moval)</FormLabel>
-                          <FormDescription>
-                            Set how many rupees one Moval is worth
-                          </FormDescription>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="e.g. 10" 
-                              step="0.01"
-                              min="0.01"
-                              {...field} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={conversionLoading}
-                    >
-                      {conversionLoading ? "Updating..." : "Update Conversion Rate"}
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
+                        {creatingElection ? "Creating..." : "Create Election"}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </CardCustom>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -545,4 +529,4 @@ const Association = () => {
   );
 };
 
-export default Association;
+export default AssociationPage;

@@ -1,128 +1,132 @@
 
 import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
+import { CardCustom, CardContent, CardHeader, CardTitle } from "@/components/ui/card-custom";
 
-const Privacy = () => {
+const PrivacyPage = () => {
+  const navigate = useNavigate();
+
+  const handleGoBack = () => {
+    navigate(-1);
+  };
+
   return (
     <Layout>
-      <div className="container max-w-3xl py-8">
-        <Button variant="ghost" size="sm" className="mb-6" asChild>
-          <Link to="/">
-            <ArrowLeft size={16} className="mr-2" /> Back to home
-          </Link>
+      <div className="container max-w-4xl py-8 px-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-6"
+          onClick={handleGoBack}
+        >
+          <ArrowLeft size={16} className="mr-2" /> Back
         </Button>
 
-        <div className="prose prose-sm sm:prose lg:prose-lg max-w-none">
-          <h1 className="text-3xl font-bold mb-6">Privacy Policy</h1>
-          
-          <p className="text-gray-600 mb-6">
-            Effective Date: July 1, 2023
-          </p>
-
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">1. Introduction</h2>
+        <CardCustom>
+          <CardHeader>
+            <CardTitle className="text-2xl">Privacy Policy</CardTitle>
+          </CardHeader>
+          <CardContent className="prose dark:prose-invert max-w-none">
             <p>
-              At Moval Society, we respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
+              Your privacy is important to us. It is Moval Society's policy to respect your privacy regarding any information we may collect from you through our application.
             </p>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">2. Information We Collect</h2>
-            <p>We collect several types of information from and about users of our application, including:</p>
-            <ul className="list-disc pl-6 mt-2">
-              <li>Personal identifiers (name, email address)</li>
-              <li>Account credentials</li>
+            <h2>1. Information We Collect</h2>
+            <p>
+              We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent. We also let you know why we're collecting it and how it will be used.
+            </p>
+            
+            <p>We may collect the following information:</p>
+            <ul>
+              <li>Personal identification information (Name, email address, phone number, etc.)</li>
               <li>Transaction history within the application</li>
-              <li>Voting history and election participation</li>
-              <li>User-generated content (such as dispute claims or candidate manifestos)</li>
-              <li>Technical data (IP address, device information, access times)</li>
+              <li>Account balances and wallet information</li>
+              <li>Voting records and preferences</li>
+              <li>Communication preferences</li>
             </ul>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">3. How We Use Your Information</h2>
-            <p>We use the information we collect to:</p>
-            <ul className="list-disc pl-6 mt-2">
-              <li>Create and maintain your account</li>
-              <li>Process and record transactions</li>
-              <li>Administer elections and voting</li>
-              <li>Resolve disputes</li>
-              <li>Improve and personalize the user experience</li>
-              <li>Communicate with you about your account and the application</li>
-              <li>Ensure the security and integrity of the application</li>
+            <h2>2. How We Use Your Information</h2>
+            <p>
+              We use the information we collect in various ways, including to:
+            </p>
+            <ul>
+              <li>Provide, operate, and maintain our application</li>
+              <li>Improve, personalize, and expand our application</li>
+              <li>Understand and analyze how you use our application</li>
+              <li>Develop new products, services, features, and functionality</li>
+              <li>Process transactions and maintain transaction records</li>
+              <li>Communicate with you about updates, security alerts, and support</li>
+              <li>Prevent fraudulent activities and ensure the security of your account</li>
             </ul>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">4. Blockchain Data</h2>
+            <h2>3. Data Retention</h2>
             <p>
-              All transactions within the Moval Society are recorded on a local blockchain. This blockchain is only accessible to users within the ecosystem and is not publicly available. Transaction data includes the sender, receiver, amount, and timestamp. This data is stored indefinitely as part of the blockchain's immutable record.
+              We only retain collected information for as long as necessary to provide you with your requested service. What data we store, we'll protect within commercially acceptable means to prevent loss and theft, as well as unauthorized access, disclosure, copying, use or modification.
             </p>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">5. Information Sharing</h2>
+            <h2>4. Blockchain Records</h2>
             <p>
-              We do not sell or rent your personal information to third parties. Within the ecosystem, information may be shared with:
+              As part of our service, transaction data is recorded on a local blockchain within the Moval Society application. This information is used to:
             </p>
-            <ul className="list-disc pl-6 mt-2">
-              <li>The Association, for governance purposes</li>
-              <li>The Justice Department, for dispute resolution</li>
-              <li>The Banker, for currency management</li>
+            <ul>
+              <li>Maintain an immutable record of all Moval transactions</li>
+              <li>Allow for transparency in the system</li>
+              <li>Enable the Justice Department to resolve disputes when necessary</li>
             </ul>
-            <p className="mt-2">
-              Basic information (such as usernames) may be visible to other users in the context of transactions, elections, or disputes.
-            </p>
-          </section>
-
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">6. Data Security</h2>
             <p>
-              We implement appropriate technical and organizational measures to protect your personal information. However, no electronic transmission or storage system is 100% secure. We cannot guarantee the absolute security of your information.
+              The blockchain data does not contain personally identifiable information, but does contain transaction amounts, timestamps, and internal account identifiers.
             </p>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">7. Your Rights</h2>
-            <p>Depending on your location, you may have rights regarding your personal data, including:</p>
-            <ul className="list-disc pl-6 mt-2">
-              <li>Access to your personal information</li>
-              <li>Correction of inaccurate data</li>
-              <li>Deletion of your data (subject to our legal obligations)</li>
-              <li>Restriction of processing</li>
-              <li>Data portability</li>
+            <h2>5. Information Sharing</h2>
+            <p>
+              We don't share any personally identifying information publicly or with third-parties, except when required to by law. Your information may be accessible to:
+            </p>
+            <ul>
+              <li>Association members (for governance purposes)</li>
+              <li>Justice Department members (for dispute resolution)</li>
+              <li>Bankers (for transaction processing)</li>
             </ul>
-            <p className="mt-2">
-              To exercise these rights, please contact us through the application or at privacy@movalsociety.com.
-            </p>
-          </section>
-
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">8. Children's Privacy</h2>
             <p>
-              Our application is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13.
+              These role-based accesses are controlled by strict permissions and are only granted to authorized members of the Moval Society.
             </p>
-          </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">9. Changes to This Privacy Policy</h2>
+            <h2>6. Your Rights</h2>
             <p>
-              We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Effective Date" at the top. You are advised to review this Privacy Policy periodically for any changes.
+              You have the right to:
             </p>
-          </section>
+            <ul>
+              <li>Access the personal information we have about you</li>
+              <li>Request correction of your personal information</li>
+              <li>Request deletion of your personal information, subject to record-keeping requirements</li>
+              <li>Receive a copy of your personal data in a structured, machine-readable format</li>
+              <li>Object to our processing of your personal information</li>
+            </ul>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">10. Contact Information</h2>
+            <h2>7. Security</h2>
             <p>
-              For questions about this Privacy Policy, please contact us at privacy@movalsociety.com.
+              We value your trust in providing us your personal information, thus we strive to use commercially acceptable means of protecting it. But remember that no method of transmission over the internet, or method of electronic storage is 100% secure and reliable, and we cannot guarantee its absolute security.
             </p>
-          </section>
-        </div>
+
+            <h2>8. Changes to This Policy</h2>
+            <p>
+              We may update our Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page. You are advised to review this Privacy Policy periodically for any changes.
+            </p>
+
+            <h2>9. Contact Us</h2>
+            <p>
+              If you have any questions about this Privacy Policy, please contact us.
+            </p>
+
+            <div className="text-sm text-muted-foreground mt-8">
+              Last updated: {new Date().toLocaleDateString()}
+            </div>
+          </CardContent>
+        </CardCustom>
       </div>
     </Layout>
   );
 };
 
-export default Privacy;
+export default PrivacyPage;

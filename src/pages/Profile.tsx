@@ -1,11 +1,12 @@
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { User, Edit, Save, Lock, ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import Layout from "@/components/layout/Layout";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -18,308 +19,409 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CardCustom, CardContent, CardHeader, CardTitle } from "@/components/ui/card-custom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, KeyIcon, Save } from "lucide-react";
 
-const profileFormSchema = z.object({
+const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
 });
 
-const passwordFormSchema = z.object({
-  currentPassword: z.string().min(6, "Current password is required"),
-  newPassword: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string().min(6, "Confirm password is required"),
+const passwordSchema = z.object({
+  currentPassword: z.string().min(8, "Password must be at least 8 characters"),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
 }).refine(data => data.newPassword === data.confirmPassword, {
-  message: "Passwords do not match",
+  message: "Passwords don't match",
   path: ["confirmPassword"],
 });
 
-const Profile = () => {
+const ProfilePage = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, updateUserData } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
-
-  const profileForm = useForm<z.infer<typeof profileFormSchema>>({
-    resolver: zodResolver(profileFormSchema),
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  
+  const profileForm = useForm<z.infer<typeof profileSchema>>({
+    resolver: zodResolver(profileSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
     },
   });
-
-  const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
-    resolver: zodResolver(passwordFormSchema),
+  
+  const passwordForm = useForm<z.infer<typeof passwordSchema>>({
+    resolver: zodResolver(passwordSchema),
     defaultValues: {
       currentPassword: "",
       newPassword: "",
       confirmPassword: "",
     },
   });
-
+  
   useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-
-    // Fetch user profile data
-    const fetchProfileData = async () => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      
+      const profileId = id || user.id;
+      setIsOwnProfile(profileId === user.id);
+      
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', user.id)
+        // Fetch profile data
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", profileId)
           .single();
-
-        if (error) throw error;
-
-        if (data) {
-          profileForm.reset({
-            firstName: data.first_name || "",
-            lastName: data.last_name || "",
-          });
-        }
+          
+        if (profileError) throw profileError;
+        
+        // Fetch user roles
+        const { data: rolesData, error: rolesError } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", profileId);
+          
+        if (rolesError) throw rolesError;
+        
+        // Update form
+        profileForm.reset({
+          firstName: profileData.first_name || "",
+          lastName: profileData.last_name || "",
+        });
+        
+        setUserRoles(rolesData.map(r => r.role));
+        
       } catch (error) {
         console.error("Error fetching profile:", error);
-        toast.error("Failed to load profile data");
+        toast.error("Failed to load profile");
+        navigate("/dashboard");
+      } finally {
+        setIsLoading(false);
       }
     };
-
-    fetchProfileData();
-  }, [user, navigate, profileForm]);
-
-  const onUpdateProfile = async (values: z.infer<typeof profileFormSchema>) => {
+    
+    fetchProfile();
+  }, [user, id, navigate]);
+  
+  const updateProfile = async (data: z.infer<typeof profileSchema>) => {
     if (!user) return;
-
+    
+    setIsUpdating(true);
+    
     try {
-      setLoading(true);
-
-      // Update profile in database
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({
-          first_name: values.firstName,
-          last_name: values.lastName,
+          first_name: data.firstName,
+          last_name: data.lastName,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', user.id);
-
+        .eq("id", id || user.id);
+        
       if (error) throw error;
-
-      // Update user state
-      await updateUserData();
-
+      
       toast.success("Profile updated successfully");
+      setIsEditing(false);
+      
+      if (isOwnProfile) {
+        await updateUserData();
+      }
+      
     } catch (error) {
       console.error("Error updating profile:", error);
       toast.error("Failed to update profile");
     } finally {
-      setLoading(false);
+      setIsUpdating(false);
     }
   };
-
-  const onChangePassword = async (values: z.infer<typeof passwordFormSchema>) => {
+  
+  const updatePassword = async (data: z.infer<typeof passwordSchema>) => {
+    if (!user) return;
+    
+    setIsUpdating(true);
+    
     try {
-      setChangePasswordLoading(true);
-
-      // Update password
       const { error } = await supabase.auth.updateUser({
-        password: values.newPassword,
+        password: data.newPassword
       });
-
+      
       if (error) throw error;
-
-      toast.success("Password changed successfully");
+      
+      toast.success("Password updated successfully");
       passwordForm.reset();
-    } catch (error: any) {
-      console.error("Error changing password:", error);
-      toast.error(error.message || "Failed to change password");
+      
+    } catch (error) {
+      console.error("Error updating password:", error);
+      toast.error("Failed to update password");
     } finally {
-      setChangePasswordLoading(false);
+      setIsUpdating(false);
     }
   };
-
-  if (!user) {
-    return null; // Will redirect in useEffect
-  }
-
-  return (
-    <Layout>
-      <div className="container max-w-2xl py-8">
-        <h1 className="text-2xl font-bold mb-6">Your Profile</h1>
-
-        <div className="flex items-center space-x-4 mb-6">
-          <Avatar className="h-16 w-16">
-            <AvatarImage src="" alt={user.name} />
-            <AvatarFallback className="text-lg">
-              {user.name.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h2 className="text-xl font-semibold">{user.name}</h2>
-            <p className="text-gray-500">{user.email}</p>
+  
+  const handleGoBack = () => {
+    navigate(-1);
+  };
+  
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="container py-8">
+          <div className="flex justify-center items-center h-64">
+            <p className="text-muted-foreground">Loading profile...</p>
           </div>
         </div>
-
-        <Tabs defaultValue="details">
-          <TabsList className="mb-6">
-            <TabsTrigger value="details">Profile Details</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="details">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Profile Information</CardTitle>
-                <CardDescription>
-                  Update your personal information
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...profileForm}>
-                  <form
-                    onSubmit={profileForm.handleSubmit(onUpdateProfile)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={profileForm.control}
-                      name="firstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Your first name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+      </Layout>
+    );
+  }
+  
+  return (
+    <Layout>
+      <div className="container max-w-3xl py-8 px-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-6"
+          onClick={handleGoBack}
+        >
+          <ArrowLeft size={16} className="mr-2" /> Back
+        </Button>
+        
+        <div className="flex items-center mb-8">
+          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-4">
+            <User size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">
+              {profileForm.watch("firstName")} {profileForm.watch("lastName")}
+            </h1>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {userRoles.map((role, idx) => (
+                <span 
+                  key={idx} 
+                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary"
+                >
+                  {role}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          {isOwnProfile && !isEditing && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-auto"
+              onClick={() => setIsEditing(true)}
+            >
+              <Edit size={16} className="mr-2" /> Edit Profile
+            </Button>
+          )}
+        </div>
+        
+        {isOwnProfile ? (
+          <Tabs defaultValue="profile">
+            <TabsList className="mb-6">
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="profile">
+              <CardCustom>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Profile Information</CardTitle>
+                    {isEditing && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setIsEditing(false)}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Form {...profileForm}>
+                    <form className="space-y-4" onSubmit={profileForm.handleSubmit(updateProfile)}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={profileForm.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>First Name</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  disabled={!isEditing}
+                                  placeholder="Enter your first name" 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={profileForm.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Last Name</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  {...field} 
+                                  disabled={!isEditing}
+                                  placeholder="Enter your last name" 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      {isEditing && (
+                        <Button 
+                          type="submit" 
+                          className="w-full"
+                          disabled={isUpdating}
+                        >
+                          {isUpdating ? (
+                            "Updating..."
+                          ) : (
+                            <>
+                              <Save size={16} className="mr-2" /> 
+                              Save Changes
+                            </>
+                          )}
+                        </Button>
                       )}
-                    />
-
-                    <FormField
-                      control={profileForm.control}
-                      name="lastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Last Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Your last name" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={loading}
-                    >
-                      {loading ? "Updating..." : "Update Profile"}
-                      <Save size={16} className="ml-2" />
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="security">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Change Password</CardTitle>
-                <CardDescription>
-                  Update your password to keep your account secure
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...passwordForm}>
-                  <form
-                    onSubmit={passwordForm.handleSubmit(onChangePassword)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={passwordForm.control}
-                      name="currentPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Current Password</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              placeholder="Your current password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={passwordForm.control}
-                      name="newPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>New Password</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              placeholder="Your new password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={passwordForm.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Confirm New Password</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="password"
-                              placeholder="Confirm your new password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={changePasswordLoading}
-                    >
-                      {changePasswordLoading
-                        ? "Changing Password..."
-                        : "Change Password"}
-                      <KeyIcon size={16} className="ml-2" />
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                    </form>
+                  </Form>
+                </CardContent>
+              </CardCustom>
+            </TabsContent>
+            
+            <TabsContent value="security">
+              <CardCustom>
+                <CardHeader>
+                  <CardTitle>Change Password</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Form {...passwordForm}>
+                    <form className="space-y-4" onSubmit={passwordForm.handleSubmit(updatePassword)}>
+                      <FormField
+                        control={passwordForm.control}
+                        name="currentPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Current Password</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="password" 
+                                placeholder="Enter your current password" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={passwordForm.control}
+                        name="newPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>New Password</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="password" 
+                                placeholder="Enter your new password" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={passwordForm.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Confirm New Password</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="password" 
+                                placeholder="Confirm your new password" 
+                                {...field} 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <Button 
+                        type="submit" 
+                        className="w-full"
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          "Updating..."
+                        ) : (
+                          <>
+                            <Lock size={16} className="mr-2" /> 
+                            Update Password
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </CardCustom>
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <CardCustom>
+            <CardHeader>
+              <CardTitle>Profile Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    First Name
+                  </h3>
+                  <p className="text-foreground">
+                    {profileForm.watch("firstName")}
+                  </p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                    Last Name
+                  </h3>
+                  <p className="text-foreground">
+                    {profileForm.watch("lastName")}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </CardCustom>
+        )}
       </div>
     </Layout>
   );
 };
 
-export default Profile;
+export default ProfilePage;

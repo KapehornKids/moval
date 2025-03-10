@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Send, UserRound } from "lucide-react";
@@ -53,32 +52,23 @@ const SendMoney = () => {
     if (!email) return;
 
     try {
-      // Look up the user by email
-      const { data: userData, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+      // Look up the user by email - Using a public query instead of admin API
+      const { data: userData, error: userError } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('email', email)
+        .single();
       
       if (userError || !userData) {
         setRecipientUser(null);
         setLookupPerformed(true);
         return;
       }
-      
-      // Get profile data
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', userData.user.id)
-        .single();
-      
-      if (profileError) {
-        setRecipientUser(null);
-        setLookupPerformed(true);
-        return;
-      }
 
-      if (profileData) {
-        const fullName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || 'User';
+      if (userData) {
+        const fullName = `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'User';
         setRecipientUser({
-          id: userData.user.id,
+          id: userData.id,
           name: fullName
         });
       } else {
