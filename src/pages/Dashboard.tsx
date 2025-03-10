@@ -9,42 +9,8 @@ import { ButtonCustom } from "@/components/ui/button-custom";
 import { useAuth } from "@/hooks/useAuth";
 import { getAnimationClass } from "@/lib/animations";
 import { Activity, ArrowRight, CreditCard, FileText, Vote, Users } from "lucide-react";
-
-// Mock transactions data
-const mockTransactions: Transaction[] = [
-  {
-    id: "txn-1",
-    type: "incoming",
-    amount: 100,
-    sender: "Alex Smith",
-    date: new Date(2023, 10, 15),
-    status: "completed",
-  },
-  {
-    id: "txn-2",
-    type: "outgoing",
-    amount: 50,
-    recipient: "Sarah Johnson",
-    date: new Date(2023, 10, 14),
-    status: "completed",
-  },
-  {
-    id: "txn-3",
-    type: "incoming",
-    amount: 200,
-    sender: "MBMQ Bank",
-    date: new Date(2023, 10, 12),
-    status: "completed",
-  },
-  {
-    id: "txn-4",
-    type: "outgoing",
-    amount: 75,
-    recipient: "Community Store",
-    date: new Date(2023, 10, 10),
-    status: "completed",
-  },
-];
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 // Quick actions for dashboard
 const quickActions = [
@@ -80,25 +46,106 @@ const quickActions = [
 
 const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const { isAuthenticated } = useAuth();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   
-  // Simulate loading state
+  // Fetch transactions
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
+    const fetchTransactions = async () => {
+      if (!user) return;
+      
+      try {
+        const { data: incomingData, error: incomingError } = await supabase
+          .from('transactions')
+          .select(`
+            id, 
+            amount, 
+            created_at, 
+            status, 
+            sender:sender_id(profiles(first_name, last_name))
+          `)
+          .eq('receiver_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10);
+          
+        if (incomingError) throw incomingError;
+        
+        const { data: outgoingData, error: outgoingError } = await supabase
+          .from('transactions')
+          .select(`
+            id, 
+            amount, 
+            created_at, 
+            status, 
+            recipient:receiver_id(profiles(first_name, last_name))
+          `)
+          .eq('sender_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10);
+          
+        if (outgoingError) throw outgoingError;
+        
+        // Transform incoming transactions
+        const incomingTransactions = incomingData.map((tx: any) => ({
+          id: tx.id,
+          type: 'incoming' as const,
+          amount: tx.amount,
+          sender: tx.sender?.profiles?.first_name && tx.sender?.profiles?.last_name 
+            ? `${tx.sender.profiles.first_name} ${tx.sender.profiles.last_name}` 
+            : 'Unknown',
+          date: new Date(tx.created_at),
+          status: tx.status as "completed" | "pending" | "failed"
+        }));
+        
+        // Transform outgoing transactions
+        const outgoingTransactions = outgoingData.map((tx: any) => ({
+          id: tx.id,
+          type: 'outgoing' as const,
+          amount: tx.amount,
+          recipient: tx.recipient?.profiles?.first_name && tx.recipient?.profiles?.last_name 
+            ? `${tx.recipient.profiles.first_name} ${tx.recipient.profiles.last_name}` 
+            : 'Unknown',
+          date: new Date(tx.created_at),
+          status: tx.status as "completed" | "pending" | "failed"
+        }));
+        
+        // Combine and sort by date
+        const allTransactions = [...incomingTransactions, ...outgoingTransactions]
+          .sort((a, b) => b.date.getTime() - a.date.getTime())
+          .slice(0, 4);
+        
+        setTransactions(allTransactions);
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    return () => clearTimeout(timer);
-  }, []);
+    fetchTransactions();
+  }, [user]);
   
-  // Redirect if not authenticated (for now, we're not enforcing this)
+  // Handle send money modal
+  const handleSendMoney = () => {
+    navigate('/send-money');
+  };
+  
+  // Redirect if not authenticated
   useEffect(() => {
-    // Commented out for demo purposes
-    // if (!isAuthenticated) {
-    //   navigate("/login");
-    // }
-  }, [isAuthenticated, navigate]);
+    if (!isAuthenticated && !isLoading) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to access the dashboard",
+        variant: "destructive",
+      });
+      navigate("/login");
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+  
+  if (!isAuthenticated && !isLoading) {
+    return null; // Don't render anything if not authenticated
+  }
   
   return (
     <Layout>
@@ -116,9 +163,8 @@ const Dashboard = () => {
             {/* Wallet Card */}
             <div className={getAnimationClass("fade", 1)}>
               <WalletCard 
-                balance={1000} 
-                onSend={() => console.log("Send clicked")} 
-                onReceive={() => console.log("Receive clicked")} 
+                onSend={handleSendMoney} 
+                onReceive={() => navigate('/receive-money')} 
               />
             </div>
             
@@ -126,7 +172,13 @@ const Dashboard = () => {
             <CardCustom className={getAnimationClass("fade", 2)}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xl">Recent Transactions</CardTitle>
-                <ButtonCustom variant="ghost" size="sm" className="gap-1" rightIcon={<ArrowRight size={16} />}>
+                <ButtonCustom 
+                  variant="ghost" 
+                  size="sm" 
+                  className="gap-1" 
+                  rightIcon={<ArrowRight size={16} />}
+                  onClick={() => navigate('/transactions')}
+                >
                   View All
                 </ButtonCustom>
               </CardHeader>
@@ -148,10 +200,14 @@ const Dashboard = () => {
                         <div className="h-5 w-16 bg-muted rounded"></div>
                       </div>
                     ))
-                  ) : (
-                    mockTransactions.map((transaction) => (
+                  ) : transactions.length > 0 ? (
+                    transactions.map((transaction) => (
                       <TransactionItem key={transaction.id} transaction={transaction} />
                     ))
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground">
+                      No transactions yet. Start sending or receiving Movals!
+                    </div>
                   )}
                 </div>
               </CardContent>

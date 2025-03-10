@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
 import { CardCustom, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card-custom";
@@ -9,6 +9,7 @@ import { ButtonCustom } from "@/components/ui/button-custom";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { getAnimationClass } from "@/lib/animations";
 
 const Register = () => {
   const [name, setName] = useState("");
@@ -18,9 +19,16 @@ const Register = () => {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
-  const { register } = useAuth();
+  const { register, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  useEffect(() => {
+    // Redirect if already authenticated
+    if (isAuthenticated) {
+      navigate("/dashboard");
+    }
+  }, [isAuthenticated, navigate]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,11 +70,8 @@ const Register = () => {
       });
       navigate("/dashboard");
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Registration failed. Please try again.",
-        variant: "destructive",
-      });
+      // Error is already handled in the register function
+      console.error("Registration error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -75,8 +80,8 @@ const Register = () => {
   return (
     <Layout showFooter={false}>
       <div className="min-h-[90vh] flex items-center justify-center p-4 md:p-8">
-        <div className="max-w-md w-full animate-fade-in">
-          <CardCustom>
+        <div className="max-w-md w-full">
+          <CardCustom className={getAnimationClass("fade", 1)}>
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold text-center">Create an Account</CardTitle>
               <CardDescription className="text-center">
