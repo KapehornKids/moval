@@ -1,198 +1,338 @@
 
-import { useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowRight, ChevronRight, Check } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
 import { ButtonCustom } from "@/components/ui/button-custom";
-import { ArrowRight, CheckCircle, Wallet, Vote, Users, Landmark } from "lucide-react";
-import { getAnimationClass } from "@/lib/animations";
+import { CardCustom } from "@/components/ui/card-custom";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
-  const featuresRef = useRef<HTMLElement | null>(null);
-  const howItWorksRef = useRef<HTMLElement | null>(null);
-
-  const scrollToSection = (ref: React.RefObject<HTMLElement>) => {
-    if (ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
+  const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
+  const [isLoaded, setIsLoaded] = useState(false);
+  
+  useEffect(() => {
+    setIsLoaded(true);
+  }, []);
+  
   return (
     <Layout>
       {/* Hero Section */}
-      <section className="relative py-20 md:py-32 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-950"></div>
-        <div className="container relative z-10 px-4 md:px-6 mx-auto">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className={getAnimationClass("fade", 1)}>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-                Welcome to <span className="text-primary">Moval Society</span>
-              </h1>
-              <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-lg">
-                A digital community with its own currency, governance, and economic system for sustainable living and collaborative growth.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <ButtonCustom 
-                  size="lg" 
-                  className="gap-2"
-                  rightIcon={<ArrowRight />}
-                  onClick={() => scrollToSection(featuresRef)}
-                >
-                  Explore Features
-                </ButtonCustom>
-                <ButtonCustom 
-                  variant="outline" 
-                  size="lg"
-                  onClick={() => scrollToSection(howItWorksRef)}
-                >
-                  How It Works
-                </ButtonCustom>
+      <section className="px-4 pt-12 pb-24 md:pt-20 md:pb-32">
+        <div className="container mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <div
+                className={`transition-all duration-700 delay-100 ${
+                  isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                }`}
+              >
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight tracking-tighter">
+                  Your Digital Economy in{" "}
+                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-700">
+                    Moval Society
+                  </span>
+                </h1>
               </div>
-            </div>
-            <div className={`relative ${getAnimationClass("slide-right", 2)}`}>
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 md:p-8">
-                <div className="aspect-video bg-gradient-to-br from-primary/20 to-blue-500/20 rounded-lg flex items-center justify-center">
-                  <Wallet size={64} className="text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold mt-6 mb-2">Moval Wallet</h3>
-                <p className="text-muted-foreground">
-                  Easily send, receive and manage your Movals within the society.
+              
+              <div
+                className={`transition-all duration-700 delay-300 ${
+                  isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                }`}
+              >
+                <p className="text-lg text-muted-foreground">
+                  Send, receive, vote, and participate in a fully functional digital society with its own economy.
                 </p>
               </div>
-              <div className="absolute -bottom-8 -right-8 bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 w-3/4">
-                <div className="flex items-start gap-4">
-                  <CheckCircle className="text-green-500 mt-1" />
-                  <div>
-                    <h4 className="font-medium">Secure Transactions</h4>
-                    <p className="text-sm text-muted-foreground">
-                      All transactions are recorded on our local blockchain
-                    </p>
+              
+              <div
+                className={`transition-all duration-700 delay-500 ${
+                  isLoaded ? "opacity-100 translate-x-0" : "opacity-0 translate-x-8"
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {isAuthenticated ? (
+                    <Link to="/dashboard">
+                      <ButtonCustom size="lg" rightIcon={<ArrowRight />}>
+                        Go to Dashboard
+                      </ButtonCustom>
+                    </Link>
+                  ) : (
+                    <Link to="/register">
+                      <ButtonCustom size="lg" rightIcon={<ArrowRight />}>
+                        Get Started
+                      </ButtonCustom>
+                    </Link>
+                  )}
+                  <Link to="/about">
+                    <ButtonCustom variant="outline" size="lg">
+                      Learn More
+                    </ButtonCustom>
+                  </Link>
+                </div>
+              </div>
+            </div>
+            
+            <div
+              className={`transition-all duration-700 delay-700 ${
+                isLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95"
+              }`}
+            >
+              <div className="relative flex justify-center">
+                <div className="w-full max-w-md aspect-square bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 rounded-3xl overflow-hidden shadow-xl">
+                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB4PSIwIiB5PSIwIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSgzMCkiPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIyIiBoZWlnaHQ9IjIiIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuKSIvPjwvc3ZnPg==')] opacity-30"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      {/* Features Section */}
+      <section className="bg-accent py-20">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold mb-4">All-in-One Society Platform</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Everything you need to participate in your digital society with a comprehensive set of features.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <CardCustom
+              className={`p-6 transition-all duration-700 delay-100 ${
+                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+              }`}
+            >
+              <div className="flex flex-col h-full">
+                <div className="mb-4 p-3 bg-primary/10 rounded-lg w-fit">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-primary"
+                  >
+                    <circle cx="12" cy="12" r="8" />
+                    <line x1="3" y1="12" x2="5" y2="12" />
+                    <line x1="19" y1="12" x2="21" y2="12" />
+                    <line x1="12" y1="3" x2="12" y2="5" />
+                    <line x1="12" y1="19" x2="12" y2="21" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Digital Wallet</h3>
+                <p className="text-muted-foreground flex-1">
+                  Send and receive Movals with ease. Track your transaction history.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to={isAuthenticated ? "/dashboard" : "/register"}
+                    className="text-primary flex items-center hover:underline font-medium"
+                  >
+                    <span>Learn more</span>
+                    <ChevronRight size={16} className="ml-1" />
+                  </Link>
+                </div>
+              </div>
+            </CardCustom>
+            
+            <CardCustom
+              className={`p-6 transition-all duration-700 delay-200 ${
+                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+              }`}
+            >
+              <div className="flex flex-col h-full">
+                <div className="mb-4 p-3 bg-primary/10 rounded-lg w-fit">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-primary"
+                  >
+                    <path d="M2 12h5" />
+                    <path d="M17 12h5" />
+                    <path d="M8 7a4 4 0 0 1 8 0v5" />
+                    <path d="M5 21v-2a7 7 0 0 1 7-7h0a7 7 0 0 1 7 7v2" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Community Voting</h3>
+                <p className="text-muted-foreground flex-1">
+                  Participate in elections and vote for association members.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to={isAuthenticated ? "/voting" : "/register"}
+                    className="text-primary flex items-center hover:underline font-medium"
+                  >
+                    <span>Learn more</span>
+                    <ChevronRight size={16} className="ml-1" />
+                  </Link>
+                </div>
+              </div>
+            </CardCustom>
+            
+            <CardCustom
+              className={`p-6 transition-all duration-700 delay-300 ${
+                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+              }`}
+            >
+              <div className="flex flex-col h-full">
+                <div className="mb-4 p-3 bg-primary/10 rounded-lg w-fit">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-primary"
+                  >
+                    <path d="M9 5H2v7l6.29 6.29c.94.94 2.48.94 3.42 0l6.29-6.29c.94-.94.94-2.48 0-3.42L11.71 2.71c-.94-.94-2.48-.94-3.42 0L5 6" />
+                    <path d="M7 9.01V9" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Loan System</h3>
+                <p className="text-muted-foreground flex-1">
+                  Request loans and manage your repayments easily.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to={isAuthenticated ? "/loans" : "/register"}
+                    className="text-primary flex items-center hover:underline font-medium"
+                  >
+                    <span>Learn more</span>
+                    <ChevronRight size={16} className="ml-1" />
+                  </Link>
+                </div>
+              </div>
+            </CardCustom>
+            
+            <CardCustom
+              className={`p-6 transition-all duration-700 delay-400 ${
+                isLoaded ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+              }`}
+            >
+              <div className="flex flex-col h-full">
+                <div className="mb-4 p-3 bg-primary/10 rounded-lg w-fit">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-primary"
+                  >
+                    <rect width="18" height="10" x="3" y="11" rx="2" />
+                    <circle cx="12" cy="5" r="2" />
+                    <path d="M12 7v4" />
+                    <line x1="8" y1="16" x2="8" y2="16" />
+                    <line x1="16" y1="16" x2="16" y2="16" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Blockchain System</h3>
+                <p className="text-muted-foreground flex-1">
+                  Transparent and secure transactions with blockchain technology.
+                </p>
+                <div className="mt-4">
+                  <Link
+                    to={isAuthenticated ? "/chainbook" : "/register"}
+                    className="text-primary flex items-center hover:underline font-medium"
+                  >
+                    <span>Learn more</span>
+                    <ChevronRight size={16} className="ml-1" />
+                  </Link>
+                </div>
+              </div>
+            </CardCustom>
+          </div>
+        </div>
+      </section>
+      
+      {/* CTA Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <div className="bg-gradient-to-r from-primary/90 to-blue-700/90 rounded-3xl overflow-hidden">
+            <div className="relative px-6 py-12 md:p-12 lg:p-16">
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB4PSIwIiB5PSIwIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSgzMCkiPjxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIyIiBoZWlnaHQ9IjIiIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3QgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNwYXR0ZXJuKSIvPjwvc3ZnPg==')] opacity-30"></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center relative z-10">
+                <div className="text-white">
+                  <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                    Ready to join our digital society?
+                  </h2>
+                  <p className="text-white/80 mb-8 max-w-md">
+                    Create your account today and start participating in a fully functional
+                    digital society with its own economy, voting system, and more.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <Link to="/register">
+                      <ButtonCustom variant="light" size="lg">
+                        Sign Up Now
+                      </ButtonCustom>
+                    </Link>
+                    <Link to="/login">
+                      <ButtonCustom variant="glass" size="lg">
+                        Sign In
+                      </ButtonCustom>
+                    </Link>
+                  </div>
+                </div>
+                <div className="md:flex items-center justify-end hidden">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                    <div className="space-y-4 max-w-xs">
+                      <div className="flex items-center">
+                        <Check
+                          size={20}
+                          className="mr-3 text-green-300"
+                        />
+                        <span className="text-white text-sm">Digital wallet for transactions</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Check
+                          size={20}
+                          className="mr-3 text-green-300"
+                        />
+                        <span className="text-white text-sm">Democratic voting system</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Check
+                          size={20}
+                          className="mr-3 text-green-300"
+                        />
+                        <span className="text-white text-sm">Transparent loan management</span>
+                      </div>
+                      <div className="flex items-center">
+                        <Check
+                          size={20}
+                          className="mr-3 text-green-300"
+                        />
+                        <span className="text-white text-sm">Blockchain-backed security</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section ref={el => { featuresRef.current = el; }} className="py-20 bg-white dark:bg-gray-950">
-        <div className="container px-4 md:px-6 mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Key Features</h2>
-            <p className="text-lg text-muted-foreground">
-              Discover the powerful tools and systems that make the Moval Society unique
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className={`bg-slate-50 dark:bg-gray-900 rounded-lg p-6 ${getAnimationClass("fade", 1)}`}>
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                <Wallet className="text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Moval Wallet</h3>
-              <p className="text-muted-foreground mb-4">
-                Send, receive and store Movals, the digital currency of our society.
-              </p>
-              <Link to="/login" className="text-primary font-medium flex items-center hover:underline">
-                Get Started <ArrowRight size={16} className="ml-2" />
-              </Link>
-            </div>
-
-            {/* Feature 2 */}
-            <div className={`bg-slate-50 dark:bg-gray-900 rounded-lg p-6 ${getAnimationClass("fade", 2)}`}>
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                <Vote className="text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Community Voting</h3>
-              <p className="text-muted-foreground mb-4">
-                Participate in elections and help shape the future of our society.
-              </p>
-              <Link to="/login" className="text-primary font-medium flex items-center hover:underline">
-                Learn More <ArrowRight size={16} className="ml-2" />
-              </Link>
-            </div>
-
-            {/* Feature 3 */}
-            <div className={`bg-slate-50 dark:bg-gray-900 rounded-lg p-6 ${getAnimationClass("fade", 3)}`}>
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                <Landmark className="text-primary" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Moval Loans</h3>
-              <p className="text-muted-foreground mb-4">
-                Request and repay loans from the MBMQ bank to fund your projects.
-              </p>
-              <Link to="/login" className="text-primary font-medium flex items-center hover:underline">
-                Apply Now <ArrowRight size={16} className="ml-2" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section ref={el => { howItWorksRef.current = el; }} className="py-20 bg-slate-50 dark:bg-gray-900">
-        <div className="container px-4 md:px-6 mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
-            <p className="text-lg text-muted-foreground">
-              Understanding the Moval Society ecosystem and how you can participate
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Step 1 */}
-            <div className={getAnimationClass("slide-up", 1)}>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 h-full">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-4">1</div>
-                <h3 className="text-lg font-semibold mb-2">Create Account</h3>
-                <p className="text-muted-foreground">
-                  Sign up for a new account to join the Moval Society.
-                </p>
-              </div>
-            </div>
-
-            {/* Step 2 */}
-            <div className={getAnimationClass("slide-up", 2)}>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 h-full">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-4">2</div>
-                <h3 className="text-lg font-semibold mb-2">Get Movals</h3>
-                <p className="text-muted-foreground">
-                  Request loans or receive Movals from other members.
-                </p>
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            <div className={getAnimationClass("slide-up", 3)}>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 h-full">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-4">3</div>
-                <h3 className="text-lg font-semibold mb-2">Participate</h3>
-                <p className="text-muted-foreground">
-                  Vote in elections and take part in community decisions.
-                </p>
-              </div>
-            </div>
-
-            {/* Step 4 */}
-            <div className={getAnimationClass("slide-up", 4)}>
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 h-full">
-                <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold mb-4">4</div>
-                <h3 className="text-lg font-semibold mb-2">Contribute</h3>
-                <p className="text-muted-foreground">
-                  Apply for roles like banker or justice department.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-12 text-center">
-            <Link to="/register">
-              <ButtonCustom size="lg" className="gap-2" rightIcon={<ArrowRight />}>
-                Join Moval Society Today
-              </ButtonCustom>
-            </Link>
           </div>
         </div>
       </section>

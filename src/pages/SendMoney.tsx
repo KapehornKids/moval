@@ -1,316 +1,286 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Send, UserRound } from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import Layout from "@/components/layout/Layout";
-import { CardCustom, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card-custom";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ButtonCustom } from "@/components/ui/button-custom";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { getAnimationClass } from "@/lib/animations";
-import { ArrowLeft, Send } from "lucide-react";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { CardCustom, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card-custom";
+
+const formSchema = z.object({
+  recipientEmail: z.string().email("Invalid email address"),
+  amount: z.string().refine(
+    (val) => {
+      const num = parseFloat(val);
+      return !isNaN(num) && num > 0;
+    },
+    { message: "Amount must be a positive number" }
+  ),
+  description: z.string().optional(),
+});
 
 const SendMoney = () => {
-  const [amount, setAmount] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSearch, setIsSearch] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
-  
-  const { user, updateUserData } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
-  
-  // Redirect if not authenticated
+  const { user, updateUserData } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recipientUser, setRecipientUser] = useState<{id: string, name: string} | null>(null);
+  const [lookupPerformed, setLookupPerformed] = useState(false);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      recipientEmail: "",
+      amount: "",
+      description: "",
+    },
+  });
+
+  const lookupRecipient = async (email: string) => {
+    if (!email) return;
+
+    try {
+      // Look up the user by email in the profiles table
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .eq('id', (await supabase.from('auth.users').select('id').eq('email', email).single()).data?.id)
+        .single();
+
+      if (error) {
+        setRecipientUser(null);
+        console.error("Error looking up recipient:", error);
+        return;
+      }
+
+      if (data) {
+        const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'User';
+        setRecipientUser({
+          id: data.id,
+          name: fullName
+        });
+      } else {
+        setRecipientUser(null);
+      }
+    } catch (error) {
+      console.error("Error in recipient lookup:", error);
+      setRecipientUser(null);
+    } finally {
+      setLookupPerformed(true);
+    }
+  };
+
   useEffect(() => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to send money",
-        variant: "destructive",
-      });
-      navigate("/login");
-    }
-  }, [user, navigate, toast]);
-  
-  // Search for recipient
-  const handleSearch = async () => {
-    if (!recipientEmail.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter an email to search",
-        variant: "destructive",
-      });
-      return;
-    }
+    const subscription = form.watch((value, { name }) => {
+      if (name === "recipientEmail" && value.recipientEmail && value.recipientEmail.includes('@')) {
+        lookupRecipient(value.recipientEmail);
+      }
+    });
     
-    setIsSearch(true);
-    setIsLoading(true);
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (!user || !recipientUser) return;
+
+    setIsSubmitting(true);
     
     try {
-      const { data: userData, error } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          first_name,
-          last_name
-        `)
-        .eq('id', (await supabase.from('auth.users').select('id').eq('email', recipientEmail).single()).data?.id)
+      const amount = parseFloat(values.amount);
+      
+      // Check if user has enough balance
+      const { data: walletData, error: walletError } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', user.id)
         .single();
       
-      if (error) throw error;
-      
-      if (userData) {
-        setSearchResults([userData]);
-      } else {
-        setSearchResults([]);
-        toast({
-          title: "No Results",
-          description: "No user found with that email"
-        });
+      if (walletError) {
+        throw new Error('Could not retrieve your wallet balance');
       }
-    } catch (error: any) {
-      console.error('Search error:', error);
-      toast({
-        title: "Search Failed",
-        description: error.message || "Failed to search for recipient",
-        variant: "destructive"
-      });
-      setSearchResults([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Handle recipient selection
-  const handleSelectRecipient = (recipient: any) => {
-    setSelectedRecipient(recipient);
-    setIsSearch(false);
-  };
-  
-  // Handle send money
-  const handleSendMoney = async () => {
-    if (!selectedRecipient) {
-      toast({
-        title: "Error",
-        description: "Please select a recipient",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid amount",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const numAmount = Number(amount);
-    
-    if (numAmount > (user?.walletBalance || 0)) {
-      toast({
-        title: "Insufficient Balance",
-        description: "You don't have enough Movals for this transaction",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // Create transaction
-      const { data: transaction, error: transactionError } = await supabase
+      
+      if (walletData.balance < amount) {
+        toast.error('Insufficient funds in your wallet');
+        return;
+      }
+      
+      // Create the transaction
+      const { data: transactionData, error: transactionError } = await supabase
         .from('transactions')
-        .insert([
-          {
-            sender_id: user?.id,
-            receiver_id: selectedRecipient.id,
-            amount: numAmount,
-            status: 'completed',
-            transaction_type: 'transfer',
-            description: `Transfer to ${selectedRecipient.first_name} ${selectedRecipient.last_name}`
-          }
-        ])
+        .insert({
+          sender_id: user.id,
+          receiver_id: recipientUser.id,
+          amount,
+          description: values.description || 'Transfer',
+          transaction_type: 'transfer'
+        })
         .select()
         .single();
       
-      if (transactionError) throw transactionError;
+      if (transactionError) {
+        throw new Error('Failed to create transaction');
+      }
       
-      // Update sender wallet (decrease balance)
-      const { error: senderWalletError } = await supabase
+      // Update the sender's wallet (subtract amount)
+      const { error: senderUpdateError } = await supabase
         .from('wallets')
-        .update({ balance: (user?.walletBalance || 0) - numAmount })
-        .eq('user_id', user?.id);
+        .update({ balance: walletData.balance - amount })
+        .eq('user_id', user.id);
       
-      if (senderWalletError) throw senderWalletError;
+      if (senderUpdateError) {
+        throw new Error('Failed to update your wallet');
+      }
       
-      // Update recipient wallet (increase balance)
-      const { error: recipientWalletError } = await supabase
+      // Update the recipient's wallet (add amount)
+      const { error: recipientUpdateError } = await supabase
         .from('wallets')
         .update({ 
-          balance: supabase.rpc('get_wallet_balance', { user_id_param: selectedRecipient.id }) + numAmount 
+          balance: supabase.rpc('get_wallet_balance', { user_id: recipientUser.id }) + amount 
         })
-        .eq('user_id', selectedRecipient.id);
+        .eq('user_id', recipientUser.id);
       
-      if (recipientWalletError) throw recipientWalletError;
+      if (recipientUpdateError) {
+        throw new Error('Failed to update recipient wallet');
+      }
       
-      // Update user data
+      // Add to blockchain
+      // This would be where you'd add the transaction to the blockchain
+      
+      // Update the user's wallet balance
       await updateUserData();
       
-      toast({
-        title: "Success",
-        description: `${numAmount} Movals sent to ${selectedRecipient.first_name} ${selectedRecipient.last_name}`,
-      });
-      
+      toast.success(`Successfully sent ${amount} Movals to ${recipientUser.name}`);
       navigate('/dashboard');
+      
     } catch (error: any) {
-      console.error('Send money error:', error);
-      toast({
-        title: "Transaction Failed",
-        description: error.message || "Failed to send money",
-        variant: "destructive"
-      });
+      console.error('Transaction error:', error);
+      toast.error(error.message || 'Failed to complete transaction');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
-  
+
+  const handleGoBack = () => {
+    navigate(-1);
+  };
+
+  if (!user) {
+    navigate('/login');
+    return null;
+  }
+
   return (
     <Layout>
-      <div className="container max-w-md px-4 py-12">
-        <CardCustom className={getAnimationClass("fade", 1)}>
+      <div className="container max-w-md mx-auto py-8 px-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-6"
+          onClick={handleGoBack}
+        >
+          <ArrowLeft size={16} className="mr-2" /> Back
+        </Button>
+        
+        <CardCustom>
           <CardHeader>
-            <div className="flex items-center">
-              <ButtonCustom 
-                variant="ghost" 
-                size="sm" 
-                className="mr-2 p-0 w-8 h-8"
-                onClick={() => navigate(-1)}
-              >
-                <ArrowLeft size={18} />
-              </ButtonCustom>
-              <CardTitle>Send Money</CardTitle>
-            </div>
+            <CardTitle className="text-xl font-semibold">Send Movals</CardTitle>
           </CardHeader>
           <CardContent>
-            {isSearch ? (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="search">Search by Email</Label>
-                  <div className="flex space-x-2">
-                    <Input
-                      id="search"
-                      value={recipientEmail}
-                      onChange={(e) => setRecipientEmail(e.target.value)}
-                      placeholder="user@example.com"
-                      disabled={isLoading}
-                    />
-                    <ButtonCustom 
-                      onClick={handleSearch} 
-                      disabled={isLoading} 
-                      loading={isLoading}
-                    >
-                      Search
-                    </ButtonCustom>
-                  </div>
-                </div>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="recipientEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Recipient Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="user@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
-                {searchResults.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label>Search Results</Label>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {searchResults.map((result) => (
-                        <div 
-                          key={result.id} 
-                          className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                          onClick={() => handleSelectRecipient(result)}
-                        >
-                          <p className="font-medium">{result.first_name} {result.last_name}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : searchResults.length === 0 && !isLoading ? (
-                  <div className="text-center py-4 text-muted-foreground">
-                    No users found. Try a different email.
-                  </div>
-                ) : null}
-                
-                <div className="flex justify-between pt-4">
-                  <ButtonCustom
-                    variant="outline"
-                    onClick={() => setIsSearch(false)}
-                  >
-                    Back
-                  </ButtonCustom>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {selectedRecipient ? (
-                  <div className="space-y-2">
-                    <Label>Recipient</Label>
-                    <div className="p-3 border rounded-lg bg-muted/30">
-                      <p className="font-medium">{selectedRecipient.first_name} {selectedRecipient.last_name}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="recipient">Recipient</Label>
-                    <ButtonCustom 
-                      variant="outline" 
-                      className="w-full justify-start text-muted-foreground font-normal"
-                      onClick={() => setIsSearch(true)}
-                    >
-                      Search for a recipient
-                    </ButtonCustom>
+                {lookupPerformed && (
+                  <div className="py-2">
+                    {recipientUser ? (
+                      <div className="flex items-center p-2 bg-primary/10 rounded-md">
+                        <UserRound size={18} className="mr-2 text-primary" />
+                        <span className="text-sm">Sending to: <span className="font-medium">{recipientUser.name}</span></span>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-red-500">
+                        Recipient not found. Please check the email address.
+                      </div>
+                    )}
                   </div>
                 )}
                 
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount (Movals)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Enter amount"
-                    disabled={isLoading}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Available balance: {user?.walletBalance || 0} M
-                  </p>
-                </div>
-              </div>
-            )}
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount (M)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0.01"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                      {user && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Available balance: {user.walletBalance} M
+                        </p>
+                      )}
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="What's this for?" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isSubmitting || !recipientUser}
+                >
+                  {isSubmitting ? "Sending..." : "Send Movals"}
+                  <Send size={16} className="ml-2" />
+                </Button>
+              </form>
+            </Form>
           </CardContent>
-          {!isSearch && (
-            <CardFooter className="flex justify-between">
-              <ButtonCustom
-                variant="outline"
-                onClick={() => navigate(-1)}
-              >
-                Cancel
-              </ButtonCustom>
-              <ButtonCustom
-                onClick={handleSendMoney}
-                disabled={isLoading || !selectedRecipient || !amount}
-                loading={isLoading}
-                leftIcon={<Send size={16} />}
-              >
-                Send Money
-              </ButtonCustom>
-            </CardFooter>
-          )}
         </CardCustom>
       </div>
     </Layout>
