@@ -11,7 +11,6 @@ import Layout from "@/components/layout/Layout";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -54,23 +53,32 @@ const SendMoney = () => {
     if (!email) return;
 
     try {
-      // Look up the user by email in the profiles table
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name')
-        .eq('id', (await supabase.from('auth.users').select('id').eq('email', email).single()).data?.id)
-        .single();
-
-      if (error) {
+      // Look up the user by email
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+      
+      if (userError || !userData) {
         setRecipientUser(null);
-        console.error("Error looking up recipient:", error);
+        setLookupPerformed(true);
+        return;
+      }
+      
+      // Get profile data
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', userData.user.id)
+        .single();
+      
+      if (profileError) {
+        setRecipientUser(null);
+        setLookupPerformed(true);
         return;
       }
 
-      if (data) {
-        const fullName = `${data.first_name || ''} ${data.last_name || ''}`.trim() || 'User';
+      if (profileData) {
+        const fullName = `${profileData.first_name || ''} ${profileData.last_name || ''}`.trim() || 'User';
         setRecipientUser({
-          id: data.id,
+          id: userData.user.id,
           name: fullName
         });
       } else {
@@ -145,20 +153,26 @@ const SendMoney = () => {
         throw new Error('Failed to update your wallet');
       }
       
+      // Get recipient's wallet balance
+      const { data: recipientWalletData, error: recipientWalletError } = await supabase
+        .from('wallets')
+        .select('balance')
+        .eq('user_id', recipientUser.id)
+        .single();
+        
+      if (recipientWalletError) {
+        throw new Error('Failed to retrieve recipient wallet');
+      }
+      
       // Update the recipient's wallet (add amount)
       const { error: recipientUpdateError } = await supabase
         .from('wallets')
-        .update({ 
-          balance: supabase.rpc('get_wallet_balance', { user_id: recipientUser.id }) + amount 
-        })
+        .update({ balance: recipientWalletData.balance + amount })
         .eq('user_id', recipientUser.id);
       
       if (recipientUpdateError) {
         throw new Error('Failed to update recipient wallet');
       }
-      
-      // Add to blockchain
-      // This would be where you'd add the transaction to the blockchain
       
       // Update the user's wallet balance
       await updateUserData();

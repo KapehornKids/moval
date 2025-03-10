@@ -3,23 +3,68 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import Layout from "@/components/layout/Layout";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CardCustom, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card-custom";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, User, Lock, Mail, LogOut } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { User, KeyIcon, Save } from "lucide-react";
+
+const profileFormSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+});
+
+const passwordFormSchema = z.object({
+  currentPassword: z.string().min(6, "Current password is required"),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Confirm password is required"),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { user, logout, updateUserData } = useAuth();
+  const { user, updateUserData } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  const profileForm = useForm<z.infer<typeof profileFormSchema>>({
+    resolver: zodResolver(profileFormSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+    },
+  });
+
+  const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
+    resolver: zodResolver(passwordFormSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
   });
 
   useEffect(() => {
@@ -28,49 +73,52 @@ const Profile = () => {
       return;
     }
 
-    const fetchProfile = async () => {
-      setLoading(true);
+    // Fetch user profile data
+    const fetchProfileData = async () => {
       try {
         const { data, error } = await supabase
-          .from("profiles")
-          .select("first_name, last_name")
-          .eq("id", user.id)
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', user.id)
           .single();
 
         if (error) throw error;
 
-        setProfile({
-          firstName: data?.first_name || "",
-          lastName: data?.last_name || "",
-          email: user.email,
-        });
+        if (data) {
+          profileForm.reset({
+            firstName: data.first_name || "",
+            lastName: data.last_name || "",
+          });
+        }
       } catch (error) {
         console.error("Error fetching profile:", error);
-        toast.error("Failed to load profile");
-      } finally {
-        setLoading(false);
+        toast.error("Failed to load profile data");
       }
     };
 
-    fetchProfile();
-  }, [user, navigate]);
+    fetchProfileData();
+  }, [user, navigate, profileForm]);
 
-  const handleUpdateProfile = async () => {
+  const onUpdateProfile = async (values: z.infer<typeof profileFormSchema>) => {
     if (!user) return;
 
-    setLoading(true);
     try {
+      setLoading(true);
+
+      // Update profile in database
       const { error } = await supabase
-        .from("profiles")
+        .from('profiles')
         .update({
-          first_name: profile.firstName,
-          last_name: profile.lastName,
+          first_name: values.firstName,
+          last_name: values.lastName,
         })
-        .eq("id", user.id);
+        .eq('id', user.id);
 
       if (error) throw error;
 
+      // Update user state
       await updateUserData();
+
       toast.success("Profile updated successfully");
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -80,165 +128,193 @@ const Profile = () => {
     }
   };
 
-  const handleChangePassword = async (oldPassword: string, newPassword: string) => {
-    setLoading(true);
+  const onChangePassword = async (values: z.infer<typeof passwordFormSchema>) => {
     try {
+      setChangePasswordLoading(true);
+
+      // Update password
       const { error } = await supabase.auth.updateUser({
-        password: newPassword,
+        password: values.newPassword,
       });
 
       if (error) throw error;
-      toast.success("Password updated successfully");
-    } catch (error) {
-      console.error("Error updating password:", error);
-      toast.error("Failed to update password");
+
+      toast.success("Password changed successfully");
+      passwordForm.reset();
+    } catch (error: any) {
+      console.error("Error changing password:", error);
+      toast.error(error.message || "Failed to change password");
     } finally {
-      setLoading(false);
+      setChangePasswordLoading(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/");
-    } catch (error) {
-      console.error("Error logging out:", error);
-      toast.error("Failed to log out");
-    }
-  };
-
-  if (!user) return null;
+  if (!user) {
+    return null; // Will redirect in useEffect
+  }
 
   return (
     <Layout>
-      <div className="container max-w-4xl mx-auto py-8 px-4">
-        <div className="mb-8 space-y-2">
-          <h1 className="text-3xl font-bold">My Profile</h1>
-          <p className="text-muted-foreground">
-            Manage your profile information and account settings
-          </p>
+      <div className="container max-w-2xl py-8">
+        <h1 className="text-2xl font-bold mb-6">Your Profile</h1>
+
+        <div className="flex items-center space-x-4 mb-6">
+          <Avatar className="h-16 w-16">
+            <AvatarImage src="" alt={user.name} />
+            <AvatarFallback className="text-lg">
+              {user.name.substring(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h2 className="text-xl font-semibold">{user.name}</h2>
+            <p className="text-gray-500">{user.email}</p>
+          </div>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="profile">Profile Info</TabsTrigger>
+        <Tabs defaultValue="details">
+          <TabsList className="mb-6">
+            <TabsTrigger value="details">Profile Details</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="profile" className="space-y-4">
-            <CardCustom>
+          <TabsContent value="details">
+            <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="mr-2" size={18} />
-                  Personal Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First name</Label>
-                    <Input
-                      id="firstName"
-                      value={profile.firstName}
-                      onChange={(e) =>
-                        setProfile({ ...profile, firstName: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last name</Label>
-                    <Input
-                      id="lastName"
-                      value={profile.lastName}
-                      onChange={(e) =>
-                        setProfile({ ...profile, lastName: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" value={profile.email} disabled />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button onClick={handleUpdateProfile} disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Changes
-                </Button>
-              </CardFooter>
-            </CardCustom>
-
-            <CardCustom>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Mail className="mr-2" size={18} />
-                  Account Settings
-                </CardTitle>
+                <CardTitle className="text-lg">Profile Information</CardTitle>
+                <CardDescription>
+                  Update your personal information
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Manage your account and connected services
-                </p>
-                <Button variant="destructive" onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign Out
-                </Button>
+                <Form {...profileForm}>
+                  <form
+                    onSubmit={profileForm.handleSubmit(onUpdateProfile)}
+                    className="space-y-4"
+                  >
+                    <FormField
+                      control={profileForm.control}
+                      name="firstName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>First Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your first name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={profileForm.control}
+                      name="lastName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Last Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your last name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={loading}
+                    >
+                      {loading ? "Updating..." : "Update Profile"}
+                      <Save size={16} className="ml-2" />
+                    </Button>
+                  </form>
+                </Form>
               </CardContent>
-            </CardCustom>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="security" className="space-y-4">
-            <CardCustom>
+          <TabsContent value="security">
+            <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Lock className="mr-2" size={18} />
-                  Change Password
-                </CardTitle>
+                <CardTitle className="text-lg">Change Password</CardTitle>
+                <CardDescription>
+                  Update your password to keep your account secure
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Current Password</Label>
-                  <Input
-                    id="currentPassword"
-                    type="password"
-                    placeholder="Enter current password"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword">New Password</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    placeholder="Enter new password"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Confirm new password"
-                  />
-                </div>
+              <CardContent>
+                <Form {...passwordForm}>
+                  <form
+                    onSubmit={passwordForm.handleSubmit(onChangePassword)}
+                    className="space-y-4"
+                  >
+                    <FormField
+                      control={passwordForm.control}
+                      name="currentPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Current Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Your current password"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={passwordForm.control}
+                      name="newPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Your new password"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={passwordForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirm New Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="password"
+                              placeholder="Confirm your new password"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={changePasswordLoading}
+                    >
+                      {changePasswordLoading
+                        ? "Changing Password..."
+                        : "Change Password"}
+                      <KeyIcon size={16} className="ml-2" />
+                    </Button>
+                  </form>
+                </Form>
               </CardContent>
-              <CardFooter>
-                <Button
-                  onClick={() =>
-                    handleChangePassword(
-                      (document.getElementById("currentPassword") as HTMLInputElement)
-                        .value,
-                      (document.getElementById("newPassword") as HTMLInputElement)
-                        .value
-                    )
-                  }
-                  disabled={loading}
-                >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Update Password
-                </Button>
-              </CardFooter>
-            </CardCustom>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
