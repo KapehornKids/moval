@@ -1,717 +1,816 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Layout from "@/components/layout/Layout";
-import { CardCustom, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card-custom";
-import { ButtonCustom } from "@/components/ui/button-custom";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@/hooks/useAuth";
-import { getAnimationClass } from "@/lib/animations";
-import { toast } from "@/hooks/use-toast";
-import { Vote, Clock, Calendar, Users, CheckCircle, XCircle, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import Layout from "@/components/layout/Layout";
+import { 
+  CardCustom, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription,
+  CardFooter
+} from "@/components/ui/card-custom";
+import { ButtonCustom } from "@/components/ui/button-custom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Users, 
+  VoteIcon, 
+  CheckCircle, 
+  XCircle, 
+  Calendar, 
+  ShieldCheck, 
+  LibraryBig,
+  UserCheck 
+} from "lucide-react";
+import { getAnimationClass } from "@/lib/animations";
+import { 
+  Form, 
+  FormControl, 
+  FormField, 
+  FormItem, 
+  FormLabel 
+} from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 
+// Define types
 interface Election {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   position_type: string;
-  status: 'upcoming' | 'active' | 'completed';
   start_date: string;
   end_date: string;
+  status: 'upcoming' | 'active' | 'ended';
   created_at: string;
   updated_at: string;
 }
 
 interface Candidate {
   id: string;
-  election_id: string;
   user_id: string;
-  manifesto: string;
+  election_id: string;
+  manifesto: string | null;
   created_at: string;
-  user_name?: string;
+  name?: string;
   vote_count?: number;
 }
 
+interface Vote {
+  id: string;
+  voter_id: string;
+  candidate_id: string;
+  election_id: string;
+  created_at: string;
+}
+
+// Zod schemas
+const candidateSchema = z.object({
+  manifesto: z.string().min(10, "Manifesto must be at least 10 characters long"),
+});
+
 const Voting = () => {
-  const [elections, setElections] = useState<Election[]>([]);
-  const [candidates, setCandidates] = useState<Record<string, Candidate[]>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [myVotes, setMyVotes] = useState<Record<string, string>>({});
-  const [showApplyForm, setShowApplyForm] = useState(false);
-  const [selectedElection, setSelectedElection] = useState<Election | null>(null);
-  const [manifesto, setManifesto] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  
+  const [isLoading, setIsLoading] = useState(true);
+  const [elections, setElections] = useState<Election[]>([]);
+  const [activeElection, setActiveElection] = useState<Election | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [hasVoted, setHasVoted] = useState(false);
+  const [isUserRegistered, setIsUserRegistered] = useState(false);
+  const [totalVotes, setTotalVotes] = useState(0);
+
+  const candidateForm = useForm<z.infer<typeof candidateSchema>>({
+    resolver: zodResolver(candidateSchema),
+    defaultValues: {
+      manifesto: "",
+    },
+  });
+
+  // Check if user is authenticated
+  useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
+      toast("Please login to access the voting system");
+      navigate("/login");
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
   // Fetch elections
   useEffect(() => {
     const fetchElections = async () => {
       try {
         setIsLoading(true);
-        
-        const { data: electionsData, error: electionsError } = await supabase
-          .from('elections')
-          .select('*')
-          .order('start_date', { ascending: false });
-          
-        if (electionsError) throw electionsError;
-        
-        const typedElections = electionsData.map(election => ({
-          ...election,
-          status: election.status as 'upcoming' | 'active' | 'completed'
-        }));
-        
-        setElections(typedElections);
-        
-        // Fetch candidates for each election
-        const candidatesPromises = typedElections.map(async (election) => {
-          const { data: candidatesData, error: candidatesError } = await supabase
-            .from('candidates')
-            .select(`
-              *,
-              profiles:user_id (
-                first_name,
-                last_name
-              )
-            `)
-            .eq('election_id', election.id);
-            
-          if (candidatesError) throw candidatesError;
-          
-          // Process candidate data
-          const processedCandidates = candidatesData.map((candidate: any) => ({
-            ...candidate,
-            user_name: candidate.profiles ? 
-              `${candidate.profiles.first_name || ''} ${candidate.profiles.last_name || ''}`.trim() : 
-              'Unknown'
-          }));
-          
-          return { electionId: election.id, candidates: processedCandidates };
+        const { data, error } = await supabase
+          .from("elections")
+          .select("*")
+          .order("start_date", { ascending: false });
+
+        if (error) throw error;
+
+        // Categorize elections by status
+        const now = new Date();
+        const categorizedElections = data.map((election) => {
+          const startDate = new Date(election.start_date);
+          const endDate = new Date(election.end_date);
+
+          let status: 'upcoming' | 'active' | 'ended';
+          if (now < startDate) {
+            status = 'upcoming';
+          } else if (now > endDate) {
+            status = 'ended';
+          } else {
+            status = 'active';
+          }
+
+          return { ...election, status };
         });
-        
-        const candidatesResults = await Promise.all(candidatesPromises);
-        
-        // Organize candidates by election
-        const candidatesByElection: Record<string, Candidate[]> = {};
-        candidatesResults.forEach(result => {
-          candidatesByElection[result.electionId] = result.candidates;
-        });
-        
-        setCandidates(candidatesByElection);
-        
-        // If user is authenticated, fetch their votes
-        if (user) {
-          const { data: votesData, error: votesError } = await supabase
-            .from('votes')
-            .select('election_id, candidate_id')
-            .eq('voter_id', user.id);
-            
-          if (votesError) throw votesError;
-          
-          // Create a mapping of election_id to candidate_id
-          const userVotes: Record<string, string> = {};
-          votesData.forEach((vote: any) => {
-            userVotes[vote.election_id] = vote.candidate_id;
-          });
-          
-          setMyVotes(userVotes);
+
+        setElections(categorizedElections);
+
+        // Find an active election if any
+        const active = categorizedElections.find((e) => e.status === 'active');
+        if (active) {
+          setActiveElection(active);
+          await fetchCandidatesForElection(active.id);
+          if (user) {
+            await checkUserVoted(active.id);
+            await checkUserIsCandidate(active.id);
+          }
         }
       } catch (error) {
-        console.error('Error fetching elections:', error);
-        toast({
-          title: "Error",
-          description: "Unable to fetch elections. Please try again.",
-          variant: "destructive",
-        });
+        console.error("Error fetching elections:", error);
+        toast.error("Could not load elections");
       } finally {
         setIsLoading(false);
       }
     };
-    
-    fetchElections();
-  }, [user]);
-  
-  // Apply as candidate
-  const handleApplyAsCandidate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user || !selectedElection) return;
-    
-    if (!manifesto) {
-      toast({
-        title: "Missing Information",
-        description: "Please provide your manifesto",
-        variant: "destructive",
-      });
-      return;
+
+    if (isAuthenticated) {
+      fetchElections();
     }
-    
+  }, [isAuthenticated, user]);
+
+  // Fetch candidates for active election
+  const fetchCandidatesForElection = async (electionId: string) => {
     try {
-      setIsSubmitting(true);
-      
-      // Check if user is already a candidate
-      const { data: existingCandidate, error: checkError } = await supabase
-        .from('candidates')
-        .select('*')
-        .eq('election_id', selectedElection.id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-        
-      if (checkError) throw checkError;
-      
-      if (existingCandidate) {
-        toast({
-          title: "Already Applied",
-          description: "You are already a candidate in this election",
-          variant: "destructive",
-        });
+      // Fetch candidates
+      const { data: candidatesData, error: candidatesError } = await supabase
+        .from("candidates")
+        .select("*")
+        .eq("election_id", electionId);
+
+      if (candidatesError) throw candidatesError;
+
+      if (!candidatesData.length) {
+        setCandidates([]);
+        setTotalVotes(0);
         return;
       }
-      
-      // Insert new candidate
-      const { data, error } = await supabase
-        .from('candidates')
-        .insert([
-          {
-            election_id: selectedElection.id,
-            user_id: user.id,
-            manifesto,
+
+      // Get user details for each candidate
+      const candidatesWithNames = await Promise.all(
+        candidatesData.map(async (candidate) => {
+          // Get user name
+          const { data: userData, error: userError } = await supabase
+            .from("profiles")
+            .select("first_name, last_name")
+            .eq("id", candidate.user_id)
+            .single();
+
+          if (userError) {
+            console.error("Error fetching candidate user:", userError);
+            return {
+              ...candidate,
+              name: "Unknown User",
+              vote_count: 0,
+            };
           }
-        ])
-        .select();
-        
-      if (error) throw error;
-      
-      toast({
-        title: "Application Submitted",
-        description: "Your candidacy application has been submitted successfully",
-      });
-      
-      // Update candidates list
-      if (data) {
-        const newCandidate = {
-          ...data[0],
-          user_name: user.name || 'You'
-        };
-        
-        setCandidates(prev => ({
-          ...prev,
-          [selectedElection.id]: [...(prev[selectedElection.id] || []), newCandidate]
-        }));
-      }
-      
-      // Reset form
-      setManifesto('');
-      setShowApplyForm(false);
-      setSelectedElection(null);
+
+          // Get vote count
+          const { count, error: countError } = await supabase
+            .from("votes")
+            .select("*", { count: "exact", head: true })
+            .eq("candidate_id", candidate.id);
+
+          if (countError) {
+            console.error("Error counting votes:", countError);
+            return {
+              ...candidate,
+              name: `${userData.first_name} ${userData.last_name}`,
+              vote_count: 0,
+            };
+          }
+
+          return {
+            ...candidate,
+            name: `${userData.first_name} ${userData.last_name}`,
+            vote_count: count || 0,
+          };
+        })
+      );
+
+      // Calculate total votes
+      const votesTotal = candidatesWithNames.reduce(
+        (sum, candidate) => sum + (candidate.vote_count || 0),
+        0
+      );
+
+      setCandidates(candidatesWithNames);
+      setTotalVotes(votesTotal);
     } catch (error) {
-      console.error('Error applying as candidate:', error);
-      toast({
-        title: "Application Failed",
-        description: "Unable to submit your candidacy. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+      console.error("Error fetching candidates:", error);
+      toast.error("Could not load candidates");
     }
   };
-  
-  // Vote for a candidate
-  const handleVote = async (electionId: string, candidateId: string) => {
+
+  // Check if user has already voted in the active election
+  const checkUserVoted = async (electionId: string) => {
     if (!user) return;
-    
+
     try {
-      // Check if user has already voted
-      if (myVotes[electionId]) {
-        if (myVotes[electionId] === candidateId) {
-          toast({
-            title: "Already Voted",
-            description: "You have already voted for this candidate",
-          });
-          return;
-        } else {
-          toast({
-            title: "Already Voted",
-            description: "You have already voted in this election for another candidate",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-      
-      // Insert new vote
-      const { error } = await supabase
-        .from('votes')
-        .insert([
-          {
-            election_id: electionId,
-            candidate_id: candidateId,
-            voter_id: user.id,
-          }
-        ]);
-        
+      const { count, error } = await supabase
+        .from("votes")
+        .select("*", { count: "exact", head: true })
+        .eq("voter_id", user.id)
+        .eq("election_id", electionId);
+
       if (error) throw error;
-      
-      // Update local state
-      setMyVotes(prev => ({
-        ...prev,
-        [electionId]: candidateId
-      }));
-      
-      toast({
-        title: "Vote Submitted",
-        description: "Your vote has been recorded successfully",
-      });
+
+      setHasVoted(!!count && count > 0);
     } catch (error) {
-      console.error('Error voting:', error);
-      toast({
-        title: "Voting Failed",
-        description: "Unable to submit your vote. Please try again.",
-        variant: "destructive",
-      });
+      console.error("Error checking if user voted:", error);
     }
   };
-  
-  // Format date for display
+
+  // Check if user is already a candidate in the active election
+  const checkUserIsCandidate = async (electionId: string) => {
+    if (!user) return;
+
+    try {
+      const { count, error } = await supabase
+        .from("candidates")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("election_id", electionId);
+
+      if (error) throw error;
+
+      setIsUserRegistered(!!count && count > 0);
+    } catch (error) {
+      console.error("Error checking if user is candidate:", error);
+    }
+  };
+
+  // Handle election selection
+  const handleElectionSelect = async (electionId: string) => {
+    const selected = elections.find((e) => e.id === electionId);
+    if (selected) {
+      setActiveElection(selected);
+      await fetchCandidatesForElection(selected.id);
+      if (user) {
+        await checkUserVoted(selected.id);
+        await checkUserIsCandidate(selected.id);
+      }
+    }
+  };
+
+  // Register as a candidate
+  const registerAsCandidate = async (data: z.infer<typeof candidateSchema>) => {
+    if (!user || !activeElection) return;
+
+    setIsRegistering(true);
+    try {
+      const { error } = await supabase.from("candidates").insert({
+        user_id: user.id,
+        election_id: activeElection.id,
+        manifesto: data.manifesto,
+      });
+
+      if (error) throw error;
+
+      toast.success("Successfully registered as a candidate");
+      candidateForm.reset();
+      setIsUserRegistered(true);
+      
+      // Refresh candidates
+      await fetchCandidatesForElection(activeElection.id);
+    } catch (error) {
+      console.error("Error registering as candidate:", error);
+      toast.error("Failed to register as a candidate");
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // Vote for a candidate
+  const voteForCandidate = async (candidateId: string) => {
+    if (!user || !activeElection || hasVoted) return;
+
+    try {
+      const { error } = await supabase.from("votes").insert({
+        voter_id: user.id,
+        candidate_id: candidateId,
+        election_id: activeElection.id,
+      });
+
+      if (error) throw error;
+
+      toast.success("Your vote has been recorded");
+      setHasVoted(true);
+      
+      // Refresh candidates and vote count
+      await fetchCandidatesForElection(activeElection.id);
+    } catch (error) {
+      console.error("Error voting:", error);
+      toast.error("Failed to record your vote");
+    }
+  };
+
+  // Format date
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
-  
-  // Get time remaining for election
-  const getTimeRemaining = (endDate: string) => {
-    const end = new Date(endDate).getTime();
-    const now = new Date().getTime();
-    const distance = end - now;
-    
-    if (distance < 0) return 'Ended';
-    
-    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    return `${days}d ${hours}h remaining`;
-  };
-  
-  // Determine if user can apply as candidate
-  const canApplyAsCandidate = (election: Election) => {
-    if (!user) return false;
-    if (election.status !== 'upcoming') return false;
-    
-    // Check if user is already a candidate
-    const electionCandidates = candidates[election.id] || [];
-    return !electionCandidates.some(candidate => candidate.user_id === user.id);
-  };
-  
-  // Handle apply button click
-  const handleApplyClick = (election: Election) => {
-    setSelectedElection(election);
-    setShowApplyForm(true);
-  };
-  
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated && !isLoading) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to access voting",
-        variant: "destructive",
-      });
-      navigate("/login");
+
+  // Calculate time remaining or elapsed
+  const getTimeStatus = (election: Election) => {
+    const now = new Date();
+    const startDate = new Date(election.start_date);
+    const endDate = new Date(election.end_date);
+
+    if (election.status === 'upcoming') {
+      const diffTime = startDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return `Starts in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+    } else if (election.status === 'active') {
+      const diffTime = endDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} remaining`;
+    } else {
+      return `Ended ${formatDate(election.end_date)}`;
     }
-  }, [isAuthenticated, isLoading, navigate]);
-  
-  if (!isAuthenticated && !isLoading) {
-    return null;
-  }
-  
+  };
+
+  // Get status badge color
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'upcoming':
+        return "bg-yellow-500/20 text-yellow-500 border-yellow-500/30";
+      case 'active':
+        return "bg-green-500/20 text-green-500 border-green-500/30";
+      case 'ended':
+        return "bg-gray-500/20 text-gray-500 border-gray-500/30";
+      default:
+        return "bg-gray-500/20 text-gray-500 border-gray-500/30";
+    }
+  };
+
+  if (!isAuthenticated && !isLoading) return null;
+
   return (
     <Layout>
-      <div className="container px-4 md:px-6 py-8 md:py-12">
+      <div className="container px-4 py-8">
         <div className="flex flex-col gap-2 mb-8">
-          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Community Voting</h1>
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">
+            Community Voting
+          </h1>
           <p className="text-muted-foreground animate-fade-in">
-            Participate in elections and vote for association members
+            Participate in elections and help shape our community
           </p>
         </div>
-        
-        {showApplyForm && selectedElection && (
-          <CardCustom className={`glass-card mb-8 ${getAnimationClass("fade", 1)}`}>
-            <CardHeader>
-              <CardTitle>Apply as Candidate for {selectedElection.title}</CardTitle>
-              <CardDescription>
-                Share your vision and goals to convince community members to vote for you
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleApplyAsCandidate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="manifesto">Your Manifesto</Label>
-                  <Textarea
-                    id="manifesto"
-                    value={manifesto}
-                    onChange={(e) => setManifesto(e.target.value)}
-                    placeholder="Describe your plans, goals, and why people should vote for you..."
-                    className="glass-effect min-h-32"
-                    required
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <ButtonCustom
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setShowApplyForm(false);
-                      setSelectedElection(null);
-                      setManifesto('');
-                    }}
-                  >
-                    Cancel
-                  </ButtonCustom>
-                  <ButtonCustom
-                    type="submit"
-                    loading={isSubmitting}
-                  >
-                    Submit Application
-                  </ButtonCustom>
-                </div>
-              </form>
-            </CardContent>
-          </CardCustom>
-        )}
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Active Elections */}
-            <CardCustom className={getAnimationClass("fade", 1)}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xl">Active Elections</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {isLoading ? (
-                    Array.from({ length: 2 }).map((_, i) => (
-                      <div key={i} className="p-4 rounded-lg glass-effect flex flex-col gap-2 animate-pulse">
-                        <div className="h-6 w-48 bg-white/10 rounded"></div>
-                        <div className="h-4 w-full bg-white/10 rounded"></div>
-                        <div className="flex gap-4 mt-2">
-                          <div className="h-8 w-24 bg-white/10 rounded"></div>
-                          <div className="h-8 w-24 bg-white/10 rounded"></div>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <p className="text-muted-foreground">Loading elections...</p>
+              </div>
+            ) : elections.length === 0 ? (
+              <CardCustom className={getAnimationClass("fade", 1)}>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                    <VoteIcon size={32} className="text-primary" />
+                  </div>
+                  <h3 className="text-xl font-medium">No Elections Available</h3>
+                  <p className="text-muted-foreground text-center mt-2 mb-6 max-w-md">
+                    There are currently no elections scheduled. Check back later or contact the association members for more information.
+                  </p>
+                </CardContent>
+              </CardCustom>
+            ) : (
+              <Tabs defaultValue={activeElection?.id || "about"} className="w-full">
+                <TabsList className="mb-6">
+                  <TabsTrigger value="about" className="flex items-center">
+                    <VoteIcon size={16} className="mr-2" />
+                    About Voting
+                  </TabsTrigger>
+                  {elections.map((election) => (
+                    <TabsTrigger
+                      key={election.id}
+                      value={election.id}
+                      className="flex items-center"
+                      onClick={() => handleElectionSelect(election.id)}
+                    >
+                      {election.status === 'active' && (
+                        <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                      )}
+                      {election.title}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                <TabsContent value="about">
+                  <CardCustom className={getAnimationClass("fade", 1)}>
+                    <CardHeader>
+                      <CardTitle>About the Voting System</CardTitle>
+                      <CardDescription>
+                        Learn how our community voting system works
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="glass-card p-4 space-y-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Calendar size={20} className="text-primary" />
+                          </div>
+                          <h3 className="font-medium">Elections</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Elections are held periodically to select members for various positions in our community.
+                          </p>
+                        </div>
+                        <div className="glass-card p-4 space-y-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <UserCheck size={20} className="text-primary" />
+                          </div>
+                          <h3 className="font-medium">Candidates</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Any member can register as a candidate by submitting their manifesto during the election period.
+                          </p>
+                        </div>
+                        <div className="glass-card p-4 space-y-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <VoteIcon size={20} className="text-primary" />
+                          </div>
+                          <h3 className="font-medium">Voting</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Each member gets one vote per election. Results are transparent and secured on our platform.
+                          </p>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    elections
-                      .filter(election => election.status === 'active')
-                      .map((election) => (
-                        <div key={election.id} className="p-4 rounded-lg glass-card space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-medium text-lg">{election.title}</h3>
-                            <span className="px-3 py-1 rounded-full text-xs bg-green-100/20 text-green-500 border border-green-500/20">
-                              Active
-                            </span>
-                          </div>
-                          
-                          <p className="text-sm text-muted-foreground">{election.description}</p>
-                          
-                          <div className="grid grid-cols-2 gap-4 pt-2">
+
+                      <Separator className="my-6" />
+
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Voting Process</h3>
+                        <ol className="space-y-3 pl-6 list-decimal">
+                          <li className="text-muted-foreground">
+                            <span className="text-foreground font-medium">Check active elections</span> - Browse through the tabs above to see ongoing or upcoming elections.
+                          </li>
+                          <li className="text-muted-foreground">
+                            <span className="text-foreground font-medium">Register as a candidate</span> - If eligible, you can submit your manifesto to become a candidate.
+                          </li>
+                          <li className="text-muted-foreground">
+                            <span className="text-foreground font-medium">Cast your vote</span> - Review candidates and cast your vote before the election ends.
+                          </li>
+                          <li className="text-muted-foreground">
+                            <span className="text-foreground font-medium">View results</span> - After the election ends, results will be available for everyone to see.
+                          </li>
+                        </ol>
+                      </div>
+
+                      <Separator className="my-6" />
+
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">Key Positions</h3>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          <div className="p-4 rounded-lg border border-muted space-y-2">
                             <div className="flex items-center gap-2">
-                              <Calendar size={14} className="text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                Ends: {formatDate(election.end_date)}
-                              </span>
+                              <ShieldCheck size={18} className="text-blue-500" />
+                              <h4 className="font-medium">Association Members</h4>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Clock size={14} className="text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {getTimeRemaining(election.end_date)}
-                              </span>
-                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Responsible for governance and overseeing community operations
+                            </p>
                           </div>
-                          
-                          {/* Candidates */}
-                          <div className="pt-3">
-                            <h4 className="text-sm font-medium mb-2">Candidates:</h4>
-                            <div className="space-y-2">
-                              {(candidates[election.id] || []).length > 0 ? (
-                                candidates[election.id].map(candidate => (
-                                  <div key={candidate.id} className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                        <Users size={16} className="text-primary" />
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-medium">{candidate.user_name}</p>
-                                        <p className="text-xs text-muted-foreground truncate max-w-xs">
-                                          {candidate.manifesto.substring(0, 50)}...
-                                        </p>
-                                      </div>
-                                    </div>
-                                    
-                                    <ButtonCustom
-                                      variant={myVotes[election.id] === candidate.id ? "primary" : "outline"}
-                                      size="sm"
-                                      onClick={() => handleVote(election.id, candidate.id)}
-                                      disabled={!!myVotes[election.id]}
-                                    >
-                                      {myVotes[election.id] === candidate.id ? "Voted" : "Vote"}
-                                    </ButtonCustom>
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No candidates yet.</p>
-                              )}
+                          <div className="p-4 rounded-lg border border-muted space-y-2">
+                            <div className="flex items-center gap-2">
+                              <LibraryBig size={18} className="text-purple-500" />
+                              <h4 className="font-medium">Justice Department</h4>
                             </div>
+                            <p className="text-xs text-muted-foreground">
+                              Responsible for dispute resolution and enforcing community rules
+                            </p>
+                          </div>
+                          <div className="p-4 rounded-lg border border-muted space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Users size={18} className="text-green-500" />
+                              <h4 className="font-medium">Other Positions</h4>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Various roles may be created as needed to support community initiatives
+                            </p>
                           </div>
                         </div>
-                      ))
-                  )}
-                  
-                  {!isLoading && elections.filter(election => election.status === 'active').length === 0 && (
-                    <div className="text-center py-8">
-                      <div className="mx-auto w-12 h-12 rounded-full bg-muted/20 flex items-center justify-center mb-3">
-                        <Vote size={24} className="text-muted-foreground" />
                       </div>
-                      <h3 className="text-lg font-medium">No Active Elections</h3>
-                      <p className="text-muted-foreground mt-1">
-                        There are no active elections at the moment. Check back later or view upcoming elections.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </CardCustom>
-            
-            {/* Upcoming Elections */}
-            <CardCustom className={getAnimationClass("fade", 2)}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xl">Upcoming Elections</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {isLoading ? (
-                    <div className="p-4 rounded-lg glass-effect flex flex-col gap-2 animate-pulse">
-                      <div className="h-6 w-48 bg-white/10 rounded"></div>
-                      <div className="h-4 w-full bg-white/10 rounded"></div>
-                      <div className="flex gap-4 mt-2">
-                        <div className="h-8 w-24 bg-white/10 rounded"></div>
-                      </div>
-                    </div>
-                  ) : (
-                    elections
-                      .filter(election => election.status === 'upcoming')
-                      .map((election) => (
-                        <div key={election.id} className="p-4 rounded-lg glass-card space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-medium text-lg">{election.title}</h3>
-                            <span className="px-3 py-1 rounded-full text-xs bg-blue-100/20 text-blue-500 border border-blue-500/20">
-                              Upcoming
-                            </span>
+                    </CardContent>
+                  </CardCustom>
+                </TabsContent>
+
+                {elections.map((election) => (
+                  <TabsContent key={election.id} value={election.id}>
+                    <CardCustom className={getAnimationClass("fade", 1)}>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>{election.title}</CardTitle>
+                            <CardDescription>
+                              {election.description || `Election for ${election.position_type} position`}
+                            </CardDescription>
                           </div>
-                          
-                          <p className="text-sm text-muted-foreground">{election.description}</p>
-                          
-                          <div className="grid grid-cols-2 gap-4 pt-2">
-                            <div className="flex items-center gap-2">
-                              <Calendar size={14} className="text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                Starts: {formatDate(election.start_date)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Calendar size={14} className="text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                Ends: {formatDate(election.end_date)}
-                              </span>
-                            </div>
+                          <Badge className={`${getStatusColor(election.status)} capitalize`}>
+                            {election.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="grid md:grid-cols-3 gap-4 mb-6">
+                          <div className="glass-card p-4">
+                            <p className="text-sm text-muted-foreground">Start Date</p>
+                            <p className="font-medium">{formatDate(election.start_date)}</p>
                           </div>
-                          
-                          {/* Candidates */}
-                          <div className="pt-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="text-sm font-medium">Candidates:</h4>
-                              {canApplyAsCandidate(election) && (
+                          <div className="glass-card p-4">
+                            <p className="text-sm text-muted-foreground">End Date</p>
+                            <p className="font-medium">{formatDate(election.end_date)}</p>
+                          </div>
+                          <div className="glass-card p-4">
+                            <p className="text-sm text-muted-foreground">Status</p>
+                            <p className="font-medium">{getTimeStatus(election)}</p>
+                          </div>
+                        </div>
+
+                        {election.status === 'active' && !isUserRegistered && !hasVoted && (
+                          <div className="glass-card p-4 mb-6">
+                            <h3 className="font-medium mb-2">Register as a Candidate</h3>
+                            <Form {...candidateForm}>
+                              <form onSubmit={candidateForm.handleSubmit(registerAsCandidate)} className="space-y-4">
+                                <FormField
+                                  control={candidateForm.control}
+                                  name="manifesto"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Your Manifesto</FormLabel>
+                                      <FormControl>
+                                        <Textarea
+                                          placeholder="Share your vision and why you should be elected..."
+                                          className="min-h-32"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
                                 <ButtonCustom
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleApplyClick(election)}
+                                  type="submit"
+                                  loading={isRegistering}
                                 >
-                                  Apply as Candidate
+                                  Register as Candidate
+                                </ButtonCustom>
+                              </form>
+                            </Form>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-medium text-lg">Candidates</h3>
+                            {totalVotes > 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                Total Votes: {totalVotes}
+                              </p>
+                            )}
+                          </div>
+
+                          {candidates.length === 0 ? (
+                            <div className="text-center py-8">
+                              <div className="mx-auto w-12 h-12 rounded-full bg-muted/20 flex items-center justify-center mb-3">
+                                <Users size={24} className="text-muted-foreground" />
+                              </div>
+                              <h3 className="text-lg font-medium">No Candidates Yet</h3>
+                              <p className="text-muted-foreground mt-1 mb-4">
+                                No one has registered as a candidate for this election yet.
+                              </p>
+                              {election.status === 'active' && !isUserRegistered && (
+                                <ButtonCustom variant="glass" onClick={() => document.getElementById('manifesto')?.focus()}>
+                                  Be the First Candidate
                                 </ButtonCustom>
                               )}
                             </div>
-                            <div className="space-y-2">
-                              {(candidates[election.id] || []).length > 0 ? (
-                                candidates[election.id].map(candidate => (
-                                  <div key={candidate.id} className="flex items-center justify-between bg-white/5 p-2 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                        <Users size={16} className="text-primary" />
-                                      </div>
+                          ) : (
+                            <div className="space-y-4 mt-4">
+                              {candidates.map((candidate) => (
+                                <div key={candidate.id} className="glass-card p-4 space-y-3">
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex items-center">
+                                      <Avatar className="h-10 w-10 mr-3">
+                                        <AvatarFallback className="bg-primary/10 text-primary">
+                                          {candidate.name?.[0] || "U"}
+                                        </AvatarFallback>
+                                      </Avatar>
                                       <div>
-                                        <p className="text-sm font-medium">{candidate.user_name}</p>
-                                        <p className="text-xs text-muted-foreground truncate max-w-xs">
-                                          {candidate.manifesto.substring(0, 50)}...
-                                        </p>
+                                        <p className="font-medium">{candidate.name}</p>
+                                        {candidate.vote_count !== undefined && totalVotes > 0 && (
+                                          <div className="flex items-center text-xs text-muted-foreground gap-2 mt-1">
+                                            <span>{candidate.vote_count} vote{candidate.vote_count !== 1 ? 's' : ''}</span>
+                                            <Progress 
+                                              value={(candidate.vote_count / totalVotes) * 100} 
+                                              className="h-1.5 w-20" 
+                                            />
+                                            <span>{Math.round((candidate.vote_count / totalVotes) * 100)}%</span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
+                                    {election.status === 'active' && !hasVoted && (
+                                      <ButtonCustom
+                                        variant="glass"
+                                        size="sm"
+                                        onClick={() => voteForCandidate(candidate.id)}
+                                      >
+                                        Vote
+                                      </ButtonCustom>
+                                    )}
+                                    {hasVoted && (
+                                      <Badge className="bg-green-500/10 text-green-500 border border-green-500/20">
+                                        You Voted
+                                      </Badge>
+                                    )}
                                   </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No candidates yet. Be the first to apply!</p>
-                              )}
+                                  {candidate.manifesto && (
+                                    <div className="text-sm text-muted-foreground pl-12">
+                                      "{candidate.manifesto}"
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                          </div>
+                          )}
                         </div>
-                      ))
-                  )}
-                  
-                  {!isLoading && elections.filter(election => election.status === 'upcoming').length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">
-                        No upcoming elections scheduled at this time.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </CardCustom>
+                      </CardContent>
+                      <CardFooter>
+                        {election.status === 'active' && hasVoted && (
+                          <div className="w-full flex items-center justify-center p-3 bg-green-500/10 rounded-lg text-green-500 text-sm">
+                            <CheckCircle size={16} className="mr-2" />
+                            You have successfully cast your vote in this election
+                          </div>
+                        )}
+                        {election.status === 'upcoming' && (
+                          <div className="w-full flex items-center justify-center p-3 bg-yellow-500/10 rounded-lg text-yellow-500 text-sm">
+                            <Calendar size={16} className="mr-2" />
+                            This election has not started yet
+                          </div>
+                        )}
+                        {election.status === 'ended' && (
+                          <div className="w-full flex items-center justify-center p-3 bg-blue-500/10 rounded-lg text-blue-500 text-sm">
+                            <LibraryBig size={16} className="mr-2" />
+                            This election has ended
+                          </div>
+                        )}
+                      </CardFooter>
+                    </CardCustom>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
           </div>
-          
+
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Election Information */}
-            <CardCustom className={`glass-card ${getAnimationClass("fade", 3)}`}>
+            <CardCustom className={`glass-card ${getAnimationClass("fade", 2)}`}>
               <CardHeader>
-                <CardTitle>Election Information</CardTitle>
+                <CardTitle>Election Status</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm">
-                  The Moval Society holds regular elections for various positions in the community. These positions help govern and manage the society.
-                </p>
-                
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Available Positions:</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Shield size={16} className="text-primary" />
+                <div className="space-y-3">
+                  {isLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="flex justify-between items-center p-3 rounded-md bg-muted/10 animate-pulse">
+                        <div className="w-32 h-4 bg-muted/20 rounded"></div>
+                        <div className="w-16 h-4 bg-muted/20 rounded"></div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">Association Member</p>
-                        <p className="text-xs text-muted-foreground">
-                          Help govern the society's daily operations
-                        </p>
-                      </div>
+                    ))
+                  ) : elections.length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-muted-foreground">No elections available</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Scale size={16} className="text-primary" />
+                  ) : (
+                    elections.map((election) => (
+                      <div
+                        key={election.id}
+                        className={`flex justify-between items-center p-3 rounded-md cursor-pointer transition-colors ${
+                          activeElection?.id === election.id
+                            ? "bg-primary/10"
+                            : "hover:bg-muted/10"
+                        }`}
+                        onClick={() => handleElectionSelect(election.id)}
+                      >
+                        <div>
+                          <p className="font-medium">{election.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {getTimeStatus(election)}
+                          </p>
+                        </div>
+                        <Badge className={`${getStatusColor(election.status)} capitalize`}>
+                          {election.status}
+                        </Badge>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">Justice Officer</p>
-                        <p className="text-xs text-muted-foreground">
-                          Handle disputes and enforce community rules
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Landmark size={16} className="text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Banker</p>
-                        <p className="text-xs text-muted-foreground">
-                          Manage society's financial resources
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    ))
+                  )}
                 </div>
-                
-                <div className="space-y-2 pt-2 border-t border-white/10">
-                  <h4 className="text-sm font-medium">Election Process:</h4>
-                  <ul className="space-y-1">
-                    <li className="text-xs text-muted-foreground flex items-start gap-2">
-                      <ChevronRight size={12} className="mt-1 flex-shrink-0" />
-                      <span>Elections are announced two weeks before the voting period</span>
-                    </li>
-                    <li className="text-xs text-muted-foreground flex items-start gap-2">
-                      <ChevronRight size={12} className="mt-1 flex-shrink-0" />
-                      <span>Candidates can apply during the announcement period</span>
-                    </li>
-                    <li className="text-xs text-muted-foreground flex items-start gap-2">
-                      <ChevronRight size={12} className="mt-1 flex-shrink-0" />
-                      <span>Voting is open to all registered members</span>
-                    </li>
-                    <li className="text-xs text-muted-foreground flex items-start gap-2">
-                      <ChevronRight size={12} className="mt-1 flex-shrink-0" />
-                      <span>Results are announced immediately after voting ends</span>
-                    </li>
-                    <li className="text-xs text-muted-foreground flex items-start gap-2">
-                      <ChevronRight size={12} className="mt-1 flex-shrink-0" />
-                      <span>Elected officers serve for a term of 3 months</span>
-                    </li>
-                  </ul>
-                </div>
-                
-                <div className="pt-2 border-t border-white/10">
-                  <p className="text-xs text-muted-foreground">
-                    For detailed information about election rules, please refer to the 
-                    <a href="/terms" className="text-primary ml-1 hover:underline">
-                      Terms & Conditions
-                    </a>.
-                  </p>
+
+                <Separator className="my-2" />
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">Your Voting Status</h3>
+                  {!activeElection ? (
+                    <p className="text-sm text-muted-foreground">
+                      No active elections at the moment
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        {hasVoted ? (
+                          <>
+                            <CheckCircle size={16} className="text-green-500" />
+                            <span>You have voted in the current election</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={16} className="text-yellow-500" />
+                            <span>You have not voted yet</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        {isUserRegistered ? (
+                          <>
+                            <CheckCircle size={16} className="text-green-500" />
+                            <span>You are registered as a candidate</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={16} className="text-muted-foreground" />
+                            <span className="text-muted-foreground">Not registered as candidate</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </CardCustom>
-            
-            {/* Past Elections */}
-            <CardCustom className={getAnimationClass("fade", 4)}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Past Elections</CardTitle>
+
+            <CardCustom className={`glass-card ${getAnimationClass("fade", 3)}`}>
+              <CardHeader>
+                <CardTitle>Voting Guidelines</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {isLoading ? (
-                    <div className="animate-pulse space-y-2">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="h-8 bg-white/10 rounded"></div>
-                      ))}
-                    </div>
-                  ) : (
-                    elections
-                      .filter(election => election.status === 'completed')
-                      .slice(0, 3)
-                      .map((election) => (
-                        <div key={election.id} className="flex justify-between items-center p-2 hover:bg-white/5 rounded-lg">
-                          <div>
-                            <p className="text-sm font-medium">{election.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(election.end_date)}
-                            </p>
-                          </div>
-                          <ButtonCustom variant="outline" size="sm">
-                            Results
-                          </ButtonCustom>
-                        </div>
-                      ))
-                  )}
-                  
-                  {!isLoading && elections.filter(election => election.status === 'completed').length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-2">
-                      No past elections available.
-                    </p>
-                  )}
-                </div>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle size={16} className="text-green-500 mt-1" />
+                    <span className="text-sm">Each member gets one vote per election</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle size={16} className="text-green-500 mt-1" />
+                    <span className="text-sm">Votes cannot be changed once cast</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle size={16} className="text-green-500 mt-1" />
+                    <span className="text-sm">You can register as a candidate in active elections</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle size={16} className="text-green-500 mt-1" />
+                    <span className="text-sm">Election results are visible to all members once closed</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle size={16} className="text-green-500 mt-1" />
+                    <span className="text-sm">Winners are determined by simple majority</span>
+                  </li>
+                </ul>
               </CardContent>
             </CardCustom>
           </div>

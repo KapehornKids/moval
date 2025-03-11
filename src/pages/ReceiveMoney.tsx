@@ -1,19 +1,31 @@
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
 import { CardCustom, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card-custom";
-import { ButtonCustom } from "@/components/ui/button-custom";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getAnimationClass } from "@/lib/animations";
-import { ArrowLeft, Copy, Share2 } from "lucide-react";
+import { ArrowLeft, Copy, QrCode, Share2, Download } from "lucide-react";
+import QRCode from "qrcode.react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
 
 const ReceiveMoney = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const qrContainerRef = useRef<HTMLDivElement>(null);
+  const [userInfo, setUserInfo] = useState<{
+    email: string;
+    walletAddress: string;
+    name: string;
+  }>({
+    email: '',
+    walletAddress: '',
+    name: ''
+  });
   
   // Redirect if not authenticated
   useEffect(() => {
@@ -24,20 +36,84 @@ const ReceiveMoney = () => {
         variant: "destructive",
       });
       navigate("/login");
+      return;
     }
+    
+    const fetchUserInfo = async () => {
+      // Get email from user object
+      const email = user.email;
+      
+      // Get name from user object
+      const name = user.name;
+      
+      // Get wallet info
+      const { data: walletData, error: walletError } = await supabase
+        .from('wallets')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (walletError) {
+        console.error('Error fetching wallet:', walletError);
+        return;
+      }
+      
+      setUserInfo({
+        email,
+        walletAddress: walletData?.id || user.id,
+        name
+      });
+    };
+    
+    fetchUserInfo();
   }, [user, navigate, toast]);
   
-  // Generate a QR code placeholder (future integration with actual QR code library)
-  const userEmail = user?.email || '';
-  
   // Handle copy to clipboard
-  const handleCopyEmail = () => {
-    navigator.clipboard.writeText(userEmail);
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
     toast({
       title: "Copied!",
-      description: "Email copied to clipboard",
+      description: `${label} copied to clipboard`,
     });
   };
+  
+  // Handle download QR code
+  const handleDownloadQR = () => {
+    const canvas = document.getElementById('user-qr-code') as HTMLCanvasElement;
+    if (!canvas) return;
+    
+    const url = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${userInfo.name.replace(/\s+/g, '_')}_wallet_qr.png`;
+    link.click();
+  };
+  
+  // Handle share
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'My Moval Wallet',
+          text: `Send Movals to me: ${userInfo.email}`,
+        });
+      } catch (error) {
+        console.error('Error sharing:', error);
+      }
+    } else {
+      toast({
+        title: "Sharing not supported",
+        description: "Your browser does not support the Web Share API",
+      });
+    }
+  };
+  
+  const qrValue = JSON.stringify({
+    type: "moval_send",
+    recipient: userInfo.email,
+    name: userInfo.name,
+    wallet: userInfo.walletAddress
+  });
   
   return (
     <Layout>
@@ -45,65 +121,130 @@ const ReceiveMoney = () => {
         <CardCustom className={getAnimationClass("fade", 1)}>
           <CardHeader>
             <div className="flex items-center">
-              <ButtonCustom 
+              <Button 
                 variant="ghost" 
                 size="sm" 
                 className="mr-2 p-0 w-8 h-8"
                 onClick={() => navigate(-1)}
               >
                 <ArrowLeft size={18} />
-              </ButtonCustom>
+              </Button>
               <CardTitle>Receive Money</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="flex flex-col items-center">
-            <div 
-              ref={qrContainerRef}
-              className="w-64 h-64 bg-white p-4 rounded-lg border shadow-sm mb-4"
-            >
-              {/* Placeholder QR code - in a real app, we'd use a QR code generator */}
-              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                <span className="text-gray-400 text-center p-4">
-                  QR Code: {userEmail}
-                  <br />
-                  (Scan to Send Movals)
-                </span>
-              </div>
-            </div>
-            
-            <div className="w-full mt-4 space-y-4">
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground">Your Email</p>
-                  <p className="font-medium">{userEmail}</p>
-                </div>
-                <ButtonCustom
-                  variant="ghost"
-                  size="sm"
-                  className="p-0 w-8 h-8"
-                  onClick={handleCopyEmail}
-                >
-                  <Copy size={16} />
-                </ButtonCustom>
-              </div>
+            <Tabs defaultValue="qrcode" className="w-full">
+              <TabsList className="w-full mb-6">
+                <TabsTrigger value="qrcode" className="flex-1">
+                  <QrCode size={16} className="mr-2" />
+                  QR Code
+                </TabsTrigger>
+                <TabsTrigger value="details" className="flex-1">
+                  <Copy size={16} className="mr-2" />
+                  Details
+                </TabsTrigger>
+              </TabsList>
               
-              <p className="text-sm text-center text-muted-foreground">
-                Share your email or have someone scan this QR code to receive Movals
-              </p>
-            </div>
+              <TabsContent value="qrcode" className="flex flex-col items-center">
+                <div 
+                  ref={qrContainerRef}
+                  className="w-64 h-64 bg-white p-6 rounded-lg shadow-sm mb-4 flex items-center justify-center"
+                >
+                  <QRCode
+                    id="user-qr-code"
+                    value={qrValue}
+                    size={240}
+                    level="H"
+                    includeMargin={false}
+                    renderAs="canvas"
+                  />
+                </div>
+                
+                <p className="text-sm text-center mb-4">
+                  Scan this QR code to receive Movals
+                </p>
+                
+                <Button 
+                  variant="outline" 
+                  className="flex items-center mb-2 w-full justify-center"
+                  onClick={handleDownloadQR}
+                >
+                  <Download size={16} className="mr-2" />
+                  Download QR Code
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  className="flex items-center w-full justify-center"
+                  onClick={handleShare}
+                >
+                  <Share2 size={16} className="mr-2" />
+                  Share QR Code
+                </Button>
+              </TabsContent>
+              
+              <TabsContent value="details">
+                <div className="space-y-4 w-full">
+                  <div className="glass-card p-4 rounded-lg space-y-1">
+                    <p className="text-sm text-muted-foreground">Name</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{userInfo.name}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="glass-card p-4 rounded-lg space-y-1">
+                    <p className="text-sm text-muted-foreground">Email</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{userInfo.email}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-0 w-8 h-8"
+                        onClick={() => handleCopy(userInfo.email, 'Email')}
+                      >
+                        <Copy size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="glass-card p-4 rounded-lg space-y-1">
+                    <p className="text-sm text-muted-foreground">Wallet Address</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm truncate max-w-[200px]">
+                        {userInfo.walletAddress}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-0 w-8 h-8"
+                        onClick={() => handleCopy(userInfo.walletAddress, 'Wallet Address')}
+                      >
+                        <Copy size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="glass-card p-4 rounded-lg">
+                    <p className="text-sm text-center text-muted-foreground">
+                      Share these details with someone to receive Movals
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
           <CardFooter className="flex justify-between">
-            <ButtonCustom
+            <Button
               variant="outline"
               onClick={() => navigate(-1)}
             >
               Back
-            </ButtonCustom>
-            <ButtonCustom
-              leftIcon={<Share2 size={16} />}
+            </Button>
+            <Button
+              onClick={() => navigate('/send-money')}
             >
-              Share
-            </ButtonCustom>
+              Send Money Instead
+            </Button>
           </CardFooter>
         </CardCustom>
       </div>
