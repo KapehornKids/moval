@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
@@ -12,18 +13,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { getAnimationClass } from '@/lib/animations';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowRight, User, DollarSign } from 'lucide-react';
+import { ArrowRight, User, DollarSign, Search } from 'lucide-react';
 
 const SendMoney = () => {
   const [activeTab, setActiveTab] = useState('send');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
   // Function to get user info by email
@@ -70,7 +71,7 @@ const SendMoney = () => {
   };
 
   // Handle user selection
-  const handleUserSelect = (user) => {
+  const handleUserSelect = (user: any) => {
     setSelectedUser(user);
     setSearchResults([]);
     setSearchTerm('');
@@ -145,7 +146,7 @@ const SendMoney = () => {
   };
 
   // Handle amount change
-  const handleAmountChange = (e) => {
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     // Allow only numbers and one decimal point
     if (/^\d*\.?\d*$/.test(value)) {
@@ -173,7 +174,7 @@ const SendMoney = () => {
       if (error) throw error;
       
       const formattedUsers = await Promise.all(
-        userProfiles.map(async (user) => {
+        (userProfiles || []).map(async (user) => {
           const email = await getUserEmailById(user.id);
           return {
             id: user.id,
@@ -249,7 +250,7 @@ const SendMoney = () => {
                       className="glass-effect"
                     />
                     <ButtonCustom
-                      variant="secondary"
+                      variant="glass"
                       size="sm"
                       className="absolute right-1 top-1 rounded-md"
                       onClick={handleUserSearch}
@@ -266,7 +267,7 @@ const SendMoney = () => {
                         handleUserSelect(user);
                       }}>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a user" value={selectedUser?.id} />
+                          <SelectValue placeholder="Select a user" />
                         </SelectTrigger>
                         <SelectContent>
                           {searchResults.map((user) => (
@@ -296,7 +297,7 @@ const SendMoney = () => {
                   <Input
                     id="amount"
                     placeholder="Enter amount"
-                    type="number"
+                    type="text"
                     value={amount}
                     onChange={handleAmountChange}
                     className="glass-effect"

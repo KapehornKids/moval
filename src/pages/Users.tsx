@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import Layout from '@/components/layout/Layout';
 import { CardCustom, CardContent, CardHeader, CardTitle } from '@/components/ui/card-custom';
@@ -11,9 +12,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { getAnimationClass } from '@/lib/animations';
 import { Filter, Search, User, Shield, Crown } from 'lucide-react';
 
+// Import the app_role enum type from database
+type AppRole = "user" | "association_member" | "banker" | "justice_department";
+
 // Define the role type that matches what's in the database
 type UserRole = {
-  role: string;
+  role: AppRole;
 };
 
 // Define the User data structure
@@ -98,11 +102,11 @@ const Users = () => {
     }
   };
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setRoleFilter(e.target.value === 'all' ? null : e.target.value);
+  const handleRoleChange = (value: string) => {
+    setRoleFilter(value === 'all' ? null : value);
   };
 
-  const handleRoleUpdate = async (userId: string, newRole: string) => {
+  const handleRoleUpdate = async (userId: string, newRole: AppRole) => {
     try {
       // Check if the user already has a role
       const { data: existingRoles, error: selectError } = await supabase
@@ -173,7 +177,7 @@ const Users = () => {
                 />
               </div>
               <div className="md:w-auto">
-                <Select onValueChange={(value) => setRoleFilter(value === 'all' ? null : value)}>
+                <Select onValueChange={handleRoleChange}>
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Filter by Role" />
                   </SelectTrigger>
@@ -223,7 +227,14 @@ const Users = () => {
                       </div>
                     </div>
                     <div>
-                      <Select onValueChange={(newRole) => handleRoleUpdate(user.id, newRole)}>
+                      <Select 
+                        onValueChange={(newRole) => 
+                          handleRoleUpdate(
+                            user.id, 
+                            newRole as AppRole
+                          )
+                        }
+                      >
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Select Role">
                             {user.user_roles && user.user_roles.length > 0 ? (

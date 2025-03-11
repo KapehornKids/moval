@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasRole: (role: "user" | "association_member" | "banker" | "justice_department") => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -26,6 +27,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Check if a user has a specific role
+  const hasRole = async (role: "user" | "association_member" | "banker" | "justice_department"): Promise<boolean> => {
+    try {
+      if (!user) return false;
+      
+      const { data, error } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: role
+      });
+      
+      if (error) {
+        console.error("Error checking role:", error);
+        return false;
+      }
+      
+      return data || false;
+    } catch (error) {
+      console.error("Error in hasRole:", error);
+      return false;
+    }
+  };
 
   // Fetch wallet balance for the user
   const fetchWalletBalance = async (userId: string): Promise<number> => {
@@ -248,6 +271,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     isLoading,
     isAuthenticated: !!user,
+    hasRole,
     login,
     register,
     logout,
