@@ -1,17 +1,20 @@
 
 import CryptoJS from 'crypto-js';
 import { supabase } from '@/integrations/supabase/client';
+import { Json } from '@/integrations/supabase/types';
+
+interface Transaction {
+  id: string;
+  sender_id?: string | null;
+  receiver_id?: string | null;
+  amount: number;
+  description?: string | null;
+  transaction_type: string;
+  timestamp: string;
+}
 
 interface BlockData {
-  transactions: Array<{
-    id: string;
-    sender_id?: string | null;
-    receiver_id?: string | null;
-    amount: number;
-    description?: string | null;
-    transaction_type: string;
-    timestamp: string;
-  }>;
+  transactions: Transaction[];
   timestamp: string;
 }
 
@@ -85,13 +88,13 @@ export const createBlock = async (transactions: any[]): Promise<Block | null> =>
       hash
     };
     
-    // Save to database
+    // Save to database - convert BlockData to JsonB compatible format
     const { data, error } = await supabase
       .from('blockchain_blocks')
       .insert({
         block_number: newBlock.blockNumber,
         timestamp: newBlock.timestamp,
-        data: newBlock.data,
+        data: newBlock.data as unknown as Json,
         current_hash: newBlock.hash,
         previous_hash: newBlock.previousHash
       })
@@ -115,7 +118,7 @@ export const createBlock = async (transactions: any[]): Promise<Block | null> =>
       id: data.id,
       blockNumber: data.block_number,
       timestamp: data.timestamp,
-      data: data.data,
+      data: data.data as unknown as BlockData,
       previousHash: data.previous_hash,
       hash: data.current_hash
     };
@@ -150,11 +153,13 @@ export const verifyBlockchain = async (): Promise<boolean> => {
       const previousBlock = blocks[i - 1];
       
       // Check if hash is valid
+      const blockData = currentBlock.data as unknown as BlockData;
+      
       const calculatedHash = calculateHash(
         currentBlock.block_number,
         currentBlock.previous_hash,
         currentBlock.timestamp,
-        currentBlock.data
+        blockData
       );
       
       if (currentBlock.current_hash !== calculatedHash) {
@@ -193,7 +198,7 @@ export const getBlockchainData = async (): Promise<Block[]> => {
       id: block.id,
       blockNumber: block.block_number,
       timestamp: block.timestamp,
-      data: block.data,
+      data: block.data as unknown as BlockData,
       previousHash: block.previous_hash,
       hash: block.current_hash
     }));
@@ -217,7 +222,8 @@ export const getTransactionsForBlock = async (blockId: string): Promise<any[]> =
       return [];
     }
     
-    return block.data.transactions || [];
+    const blockData = block.data as unknown as BlockData;
+    return blockData.transactions || [];
   } catch (error) {
     console.error('Error in getTransactionsForBlock:', error);
     return [];

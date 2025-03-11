@@ -1,41 +1,28 @@
+import { useState, useEffect } from 'react';
+import { toast } from '@/hooks/use-toast';
+import Layout from '@/components/layout/Layout';
+import { CardCustom, CardContent, CardHeader, CardTitle } from '@/components/ui/card-custom';
+import { ButtonCustom } from '@/components/ui/button-custom';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { getAnimationClass } from '@/lib/animations';
+import { Filter, Search, AlertCircle, User, CheckCircle, XCircle, Clock, ShieldAlert } from 'lucide-react';
 
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import Layout from "@/components/layout/Layout";
-import { supabase } from "@/integrations/supabase/client";
-import { CardCustom, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card-custom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { 
-  Scale, AlertTriangle, CheckCircle, XCircle, Clock, 
-  FileText, User, Users, Shield
-} from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import { format, formatDistanceToNow } from "date-fns";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// TypeScript interface for dispute status
+type DisputeStatus = 'pending' | 'in_review' | 'resolved' | 'dismissed';
 
+// Interface for dispute
 interface Dispute {
   id: string;
   complainant_id: string;
   respondent_id: string | null;
   description: string;
   evidence: string | null;
-  status: "pending" | "in_review" | "resolved" | "dismissed";
   ruling: string | null;
   ruled_by: string | null;
+  status: DisputeStatus;
   created_at: string;
   updated_at: string;
   complainant_name?: string;
@@ -44,463 +31,444 @@ interface Dispute {
 
 const Justice = () => {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
-  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
-  const [isRulingDialogOpen, setIsRulingDialogOpen] = useState(false);
-  const [ruling, setRuling] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("pending");
-
-  const { isAuthenticated, user } = useAuth();
-  const { toast } = useToast();
-  const navigate = useNavigate();
-
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<DisputeStatus | 'all'>('all');
+  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
+  const [ruling, setRuling] = useState('');
+  
+  const { user, isAuthenticated, hasRole } = useAuth();
+  
   useEffect(() => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to access the justice panel",
-        variant: "destructive",
-      });
-      navigate("/login");
-      return;
+    if (isAuthenticated) {
+      fetchDisputes();
     }
-
-    if (user && user.role !== 'justice') {
-      toast({
-        title: "Access Denied",
-        description: "You do not have permission to access the justice panel",
-        variant: "destructive",
-      });
-      navigate("/dashboard");
-      return;
-    }
-
-    const fetchDisputes = async () => {
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from('disputes')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        // Fetch user names for disputes
-        const disputesWithNames = await Promise.all(
-          (data || []).map(async (dispute) => {
-            let complainantName = 'Unknown';
-            let respondentName = 'Unknown';
-
-            if (dispute.complainant_id) {
-              const { data: complainantData } = await supabase
-                .from('profiles')
-                .select('first_name, last_name')
-                .eq('id', dispute.complainant_id)
-                .single();
-                
-              if (complainantData) {
-                complainantName = `${complainantData.first_name || ''} ${complainantData.last_name || ''}`.trim() || 'Unknown';
-              }
-            }
-
-            if (dispute.respondent_id) {
-              const { data: respondentData } = await supabase
-                .from('profiles')
-                .select('first_name, last_name')
-                .eq('id', dispute.respondent_id)
-                .single();
-                
-              if (respondentData) {
-                respondentName = `${respondentData.first_name || ''} ${respondentData.last_name || ''}`.trim() || 'Unknown';
-              }
-            }
-
-            return {
-              ...dispute,
-              complainant_name: complainantName,
-              respondent_name: respondentName
-            };
-          })
-        );
-
-        setDisputes(disputesWithNames);
-      } catch (error: any) {
-        console.error("Error fetching disputes:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load disputes",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDisputes();
-  }, [isAuthenticated, navigate, toast, user]);
-
-  const handleUpdateDisputeStatus = async (disputeId: string, newStatus: string) => {
+  }, [isAuthenticated, statusFilter, searchQuery]);
+  
+  const fetchDisputes = async () => {
     try {
-      const { error } = await supabase
+      setIsLoading(true);
+      
+      // Fetch all disputes
+      const { data: disputesData, error } = await supabase
         .from('disputes')
-        .update({ status: newStatus })
-        .eq('id', disputeId);
-
+        .select('*')
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
-
+      
+      // Fetch user names for each dispute
+      const disputesWithNames = await Promise.all(
+        disputesData.map(async (dispute) => {
+          let complainantName = 'Unknown';
+          let respondentName = 'Unknown';
+          
+          // Get complainant name
+          if (dispute.complainant_id) {
+            const { data: complainantData } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', dispute.complainant_id)
+              .single();
+              
+            if (complainantData) {
+              complainantName = `${complainantData.first_name || ''} ${complainantData.last_name || ''}`.trim();
+            }
+          }
+          
+          // Get respondent name if exists
+          if (dispute.respondent_id) {
+            const { data: respondentData } = await supabase
+              .from('profiles')
+              .select('first_name, last_name')
+              .eq('id', dispute.respondent_id)
+              .single();
+              
+            if (respondentData) {
+              respondentName = `${respondentData.first_name || ''} ${respondentData.last_name || ''}`.trim();
+            }
+          }
+          
+          return {
+            ...dispute,
+            complainant_name: complainantName,
+            respondent_name: respondentName
+          };
+        })
+      );
+      
+      // Apply filters
+      let filteredDisputes = disputesWithNames;
+      
+      if (statusFilter !== 'all') {
+        filteredDisputes = filteredDisputes.filter(d => d.status === statusFilter);
+      }
+      
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filteredDisputes = filteredDisputes.filter(d => 
+          d.description.toLowerCase().includes(query) ||
+          d.complainant_name?.toLowerCase().includes(query) ||
+          d.respondent_name?.toLowerCase().includes(query)
+        );
+      }
+      
+      setDisputes(filteredDisputes);
+    } catch (error) {
+      console.error('Error fetching disputes:', error);
       toast({
-        title: "Status Updated",
-        description: "The dispute status has been updated",
+        title: 'Error',
+        description: 'Failed to load disputes. Please try again.',
+        variant: 'destructive',
       });
-
-      setDisputes(prev => prev.map(dispute => 
-        dispute.id === disputeId ? { ...dispute, status: newStatus } : dispute
-      ));
-    } catch (error: any) {
-      console.error("Error updating dispute status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update dispute status",
-        variant: "destructive",
-      });
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const handleMakeRuling = async () => {
-    if (!selectedDispute || !user) return;
+  
+  const handleResolve = async () => {
+    if (!selectedDispute || !ruling.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please provide a ruling before resolving the dispute.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     try {
       const { error } = await supabase
         .from('disputes')
         .update({
           ruling,
+          ruled_by: user?.id,
           status: 'resolved',
-          ruled_by: user.id,
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedDispute.id);
-
+      
       if (error) throw error;
-
+      
       toast({
-        title: "Ruling Made",
-        description: "Your ruling has been recorded",
+        title: 'Success',
+        description: 'Dispute has been resolved successfully.',
+        variant: 'default',
       });
-
-      setDisputes(prev => prev.map(dispute => 
-        dispute.id === selectedDispute.id 
-          ? { ...dispute, ruling, status: 'resolved', ruled_by: user.id } 
-          : dispute
-      ));
-
-      setIsRulingDialogOpen(false);
-      setRuling("");
+      
       setSelectedDispute(null);
-    } catch (error: any) {
-      console.error("Error making ruling:", error);
+      setRuling('');
+      fetchDisputes();
+    } catch (error) {
+      console.error('Error resolving dispute:', error);
       toast({
-        title: "Error",
-        description: "Failed to record your ruling",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to resolve dispute. Please try again.',
+        variant: 'destructive',
       });
     }
   };
-
-  const filteredDisputes = disputes.filter(dispute => {
-    if (activeTab === "pending") {
-      return dispute.status === "pending" || dispute.status === "in_review";
-    } else if (activeTab === "resolved") {
-      return dispute.status === "resolved" || dispute.status === "dismissed";
+  
+  const handleDismiss = async () => {
+    if (!selectedDispute) return;
+    
+    try {
+      const { error } = await supabase
+        .from('disputes')
+        .update({
+          ruling: ruling || 'Dismissed without specific ruling.',
+          ruled_by: user?.id,
+          status: 'dismissed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedDispute.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Success',
+        description: 'Dispute has been dismissed.',
+        variant: 'default',
+      });
+      
+      setSelectedDispute(null);
+      setRuling('');
+      fetchDisputes();
+    } catch (error) {
+      console.error('Error dismissing dispute:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to dismiss dispute. Please try again.',
+        variant: 'destructive',
+      });
     }
-    return true;
-  });
-
+  };
+  
+  const renderStatusBadge = (status: DisputeStatus) => {
+    switch (status) {
+      case 'pending':
+        return (
+          <div className="flex items-center gap-1 text-yellow-500">
+            <Clock size={14} />
+            <span>Pending</span>
+          </div>
+        );
+      case 'in_review':
+        <div className="flex items-center gap-1 text-blue-500">
+          <AlertCircle size={14} />
+          <span>In Review</span>
+        </div>
+      case 'resolved':
+        return (
+          <div className="flex items-center gap-1 text-green-500">
+            <CheckCircle size={14} />
+            <span>Resolved</span>
+          </div>
+        );
+      case 'dismissed':
+        return (
+          <div className="flex items-center gap-1 text-red-500">
+            <XCircle size={14} />
+            <span>Dismissed</span>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center gap-1 text-gray-500">
+            <AlertCircle size={14} />
+            <span>{status}</span>
+          </div>
+        );
+    }
+  };
+  
   return (
     <Layout>
-      <div className="container px-4 pt-8 pb-16">
-        <div className="flex items-center gap-3 mb-6">
-          <Scale className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Justice Dashboard</h1>
+      <div className="container px-4 md:px-6 py-8 md:py-12">
+        <div className="flex flex-col gap-2 mb-8">
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Justice Department</h1>
+          <p className="text-muted-foreground animate-fade-in">
+            Review and resolve disputes within the Moval Society
+          </p>
         </div>
-
-        <p className="text-muted-foreground mb-8 max-w-3xl">
-          As a Justice of the Moval Society, you're responsible for reviewing and ruling on disputes between members.
-          Your decisions help maintain order and fairness in our community.
-        </p>
-
-        <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="glass-effect mb-6">
-            <TabsTrigger value="pending" className="flex items-center gap-2">
-              <Clock size={16} />
-              <span>Pending Disputes</span>
-            </TabsTrigger>
-            <TabsTrigger value="resolved" className="flex items-center gap-2">
-              <CheckCircle size={16} />
-              <span>Resolved Disputes</span>
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="pending" className="mt-0">
-            {isLoading ? (
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <CardCustom key={i} className="glass-card animate-pulse">
-                    <CardHeader>
-                      <div className="h-6 w-48 bg-primary/20 rounded"></div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="h-4 w-full bg-primary/20 rounded"></div>
-                        <div className="h-4 w-3/4 bg-primary/20 rounded"></div>
-                      </div>
-                    </CardContent>
-                  </CardCustom>
-                ))}
+        
+        {/* Search and Filters */}
+        <CardCustom className={`glass-card mb-6 ${getAnimationClass("fade", 1)}`}>
+          <CardContent className="py-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search disputes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 glass-effect"
+                />
               </div>
-            ) : filteredDisputes.length > 0 ? (
-              <div className="space-y-6">
-                {filteredDisputes.map((dispute) => (
-                  <CardCustom key={dispute.id} className="glass-card overflow-hidden">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-center flex-wrap gap-2">
-                        <CardTitle className="text-lg">
-                          Dispute #{dispute.id.slice(0, 8)}
-                        </CardTitle>
-                        <div className={cn(
-                          "px-3 py-1 text-xs rounded-full flex items-center gap-1",
-                          dispute.status === 'pending' ? "bg-yellow-500/20 text-yellow-300" :
-                          dispute.status === 'in_review' ? "bg-blue-500/20 text-blue-300" :
-                          dispute.status === 'resolved' ? "bg-green-500/20 text-green-300" :
-                          "bg-red-500/20 text-red-300"
-                        )}>
-                          {dispute.status === 'pending' && <Clock size={12} />}
-                          {dispute.status === 'in_review' && <FileText size={12} />}
-                          {dispute.status === 'resolved' && <CheckCircle size={12} />}
-                          {dispute.status === 'dismissed' && <XCircle size={12} />}
-                          <span>{dispute.status.replace('_', ' ').toUpperCase()}</span>
-                        </div>
+              <div className="flex gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as DisputeStatus | 'all')}
+                  className="glass-effect rounded-md px-3 py-2 text-sm border border-white/10 bg-white/5"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_review">In Review</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="dismissed">Dismissed</option>
+                </select>
+                <ButtonCustom variant="outline" className="md:w-auto">
+                  <Filter size={16} className="mr-2" />
+                  Filters
+                </ButtonCustom>
+              </div>
+            </div>
+          </CardContent>
+        </CardCustom>
+        
+        {/* Disputes List */}
+        <div className="grid grid-cols-1 gap-4">
+          {isLoading ? (
+            // Loading skeletons
+            Array.from({ length: 3 }).map((_, i) => (
+              <CardCustom key={i} className="animate-pulse">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="h-6 w-32 bg-white/10 rounded"></div>
+                    <div className="h-6 w-24 bg-white/10 rounded"></div>
+                  </div>
+                  <div className="mt-4 h-8 w-full bg-white/10 rounded"></div>
+                  <div className="mt-2 h-4 w-1/2 bg-white/10 rounded"></div>
+                </CardContent>
+              </CardCustom>
+            ))
+          ) : disputes.length > 0 ? (
+            disputes.map((dispute) => (
+              <CardCustom 
+                key={dispute.id} 
+                className={`glass-card hover:bg-white/5 transition-colors cursor-pointer ${getAnimationClass("fade", 2)}`}
+                onClick={() => setSelectedDispute(dispute)}
+              >
+                <CardContent className="py-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert size={18} className="text-primary" />
+                        <h3 className="font-medium">Dispute #{dispute.id.substring(0, 8)}</h3>
                       </div>
-                      <CardDescription>
-                        Filed {formatDistanceToNow(new Date(dispute.created_at), { addSuffix: true })}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex gap-6 text-sm">
-                          <div className="flex-1">
-                            <div className="text-muted-foreground mb-1">Complainant</div>
-                            <div className="font-medium flex items-center gap-2">
-                              <User size={14} />
-                              {dispute.complainant_name}
-                            </div>
-                          </div>
-                          
-                          {dispute.respondent_id && (
-                            <div className="flex-1">
-                              <div className="text-muted-foreground mb-1">Respondent</div>
-                              <div className="font-medium flex items-center gap-2">
-                                <User size={14} />
-                                {dispute.respondent_name}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="pt-2 border-t border-white/10">
-                          <h4 className="text-sm font-medium mb-1">Description</h4>
-                          <p className="text-sm text-muted-foreground whitespace-pre-line">
-                            {dispute.description}
-                          </p>
-                        </div>
-                        
-                        {dispute.evidence && (
-                          <div className="pt-2 border-t border-white/10">
-                            <h4 className="text-sm font-medium mb-1">Evidence</h4>
-                            <p className="text-sm text-muted-foreground whitespace-pre-line">
-                              {dispute.evidence}
-                            </p>
-                          </div>
-                        )}
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Filed on {new Date(dispute.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {renderStatusBadge(dispute.status)}
+                  </div>
+                  
+                  <div className="mt-4">
+                    <p className="text-sm line-clamp-2">{dispute.description}</p>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Complainant</p>
+                      <p className="text-sm font-medium">{dispute.complainant_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Respondent</p>
+                      <p className="text-sm font-medium">{dispute.respondent_name || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </CardCustom>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <div className="mx-auto w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mb-4">
+                <ShieldAlert size={32} className="text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-medium">No Disputes Found</h3>
+              <p className="text-muted-foreground mt-2">
+                {searchQuery || statusFilter !== 'all' 
+                  ? 'No disputes match your search criteria' 
+                  : 'There are no disputes to review at this time'}
+              </p>
+            </div>
+          )}
+        </div>
+        
+        {/* Selected Dispute Modal */}
+        {selectedDispute && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <CardCustom className="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <CardHeader>
+                <CardTitle>Dispute Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert size={18} className="text-primary" />
+                    <h3 className="font-medium">Dispute #{selectedDispute.id.substring(0, 8)}</h3>
+                  </div>
+                  {renderStatusBadge(selectedDispute.status)}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Filed On</Label>
+                    <p className="text-sm">{new Date(selectedDispute.created_at).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Last Updated</Label>
+                    <p className="text-sm">{new Date(selectedDispute.updated_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Description</Label>
+                  <div className="p-3 rounded-md bg-white/5 text-sm">
+                    {selectedDispute.description}
+                  </div>
+                </div>
+                
+                {selectedDispute.evidence && (
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Evidence</Label>
+                    <div className="p-3 rounded-md bg-white/5 text-sm">
+                      {selectedDispute.evidence}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Complainant</Label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                        <User size={14} className="text-primary" />
                       </div>
-                    </CardContent>
+                      <p className="text-sm">{selectedDispute.complainant_name}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Respondent</Label>
+                    {selectedDispute.respondent_name ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                          <User size={14} className="text-primary" />
+                        </div>
+                        <p className="text-sm">{selectedDispute.respondent_name}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">Not specified</p>
+                    )}
+                  </div>
+                </div>
+                
+                {selectedDispute.ruling && (
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-xs text-muted-foreground">Ruling</Label>
+                    <div className="p-3 rounded-md bg-white/5 text-sm">
+                      {selectedDispute.ruling}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Justice Department Actions */}
+                {hasRole('justice_department') && selectedDispute.status === 'pending' && (
+                  <div className="space-y-4 pt-4 border-t border-white/10">
+                    <Label htmlFor="ruling">Your Ruling</Label>
+                    <Textarea 
+                      id="ruling"
+                      placeholder="Enter your ruling on this dispute..."
+                      value={ruling}
+                      onChange={(e) => setRuling(e.target.value)}
+                      className="min-h-[100px]"
+                    />
                     
-                    <CardFooter className="border-t border-white/10 pt-4 flex-wrap gap-2">
-                      {dispute.status === 'pending' && (
-                        <Button 
-                          className="flex-1 glass-button"
-                          onClick={() => handleUpdateDisputeStatus(dispute.id, 'in_review')}
-                        >
-                          Start Review
-                        </Button>
-                      )}
-                      
-                      {dispute.status === 'in_review' && (
-                        <>
-                          <Dialog open={isRulingDialogOpen && selectedDispute?.id === dispute.id} 
-                            onOpenChange={(open) => {
-                              setIsRulingDialogOpen(open);
-                              if (!open) setSelectedDispute(null);
-                            }}>
-                            <DialogTrigger asChild>
-                              <Button 
-                                className="flex-1 glass-button"
-                                onClick={() => setSelectedDispute(dispute)}
-                              >
-                                Make Ruling
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="glass-card max-w-md">
-                              <DialogHeader>
-                                <DialogTitle>Make Ruling on Dispute</DialogTitle>
-                                <DialogDescription>
-                                  Your ruling will be recorded and shared with all parties involved
-                                </DialogDescription>
-                              </DialogHeader>
-                              
-                              <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="ruling">Your Ruling</Label>
-                                  <Textarea
-                                    id="ruling"
-                                    placeholder="Enter your official ruling on this case..."
-                                    rows={6}
-                                    value={ruling}
-                                    onChange={(e) => setRuling(e.target.value)}
-                                  />
-                                </div>
-                              </div>
-                              
-                              <DialogFooter>
-                                <Button variant="outline" onClick={() => {
-                                  setIsRulingDialogOpen(false);
-                                  setSelectedDispute(null);
-                                }}>
-                                  Cancel
-                                </Button>
-                                <Button onClick={handleMakeRuling}>
-                                  Submit Ruling
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                          
-                          <Button 
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => handleUpdateDisputeStatus(dispute.id, 'dismissed')}
-                          >
-                            Dismiss Case
-                          </Button>
-                        </>
-                      )}
-                    </CardFooter>
-                  </CardCustom>
-                ))}
-              </div>
-            ) : (
-              <CardCustom className="glass-card text-center p-12">
-                <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-medium mb-2">No Pending Disputes</h3>
-                <p className="text-muted-foreground">
-                  There are currently no disputes that require your attention.
-                </p>
-              </CardCustom>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="resolved" className="mt-0">
-            {isLoading ? (
-              <div className="space-y-4">
-                {[...Array(2)].map((_, i) => (
-                  <CardCustom key={i} className="glass-card animate-pulse">
-                    <CardHeader>
-                      <div className="h-6 w-48 bg-primary/20 rounded"></div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="h-4 w-full bg-primary/20 rounded"></div>
-                        <div className="h-4 w-3/4 bg-primary/20 rounded"></div>
-                      </div>
-                    </CardContent>
-                  </CardCustom>
-                ))}
-              </div>
-            ) : filteredDisputes.length > 0 ? (
-              <div className="space-y-6">
-                {filteredDisputes.map((dispute) => (
-                  <CardCustom key={dispute.id} className="glass-card overflow-hidden">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-center flex-wrap gap-2">
-                        <CardTitle className="text-lg">
-                          Dispute #{dispute.id.slice(0, 8)}
-                        </CardTitle>
-                        <div className={cn(
-                          "px-3 py-1 text-xs rounded-full flex items-center gap-1",
-                          dispute.status === 'resolved' ? "bg-green-500/20 text-green-300" :
-                          "bg-red-500/20 text-red-300"
-                        )}>
-                          {dispute.status === 'resolved' && <CheckCircle size={12} />}
-                          {dispute.status === 'dismissed' && <XCircle size={12} />}
-                          <span>{dispute.status.replace('_', ' ').toUpperCase()}</span>
-                        </div>
-                      </div>
-                      <CardDescription>
-                        Filed {format(new Date(dispute.created_at), "MMMM d, yyyy")}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex gap-6 text-sm">
-                          <div className="flex-1">
-                            <div className="text-muted-foreground mb-1">Complainant</div>
-                            <div className="font-medium flex items-center gap-2">
-                              <User size={14} />
-                              {dispute.complainant_name}
-                            </div>
-                          </div>
-                          
-                          {dispute.respondent_id && (
-                            <div className="flex-1">
-                              <div className="text-muted-foreground mb-1">Respondent</div>
-                              <div className="font-medium flex items-center gap-2">
-                                <User size={14} />
-                                {dispute.respondent_name}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="pt-2 border-t border-white/10">
-                          <h4 className="text-sm font-medium mb-1">Description</h4>
-                          <p className="text-sm text-muted-foreground whitespace-pre-line">
-                            {dispute.description}
-                          </p>
-                        </div>
-                        
-                        {dispute.ruling && dispute.status === 'resolved' && (
-                          <div className="pt-2 border-t border-white/10">
-                            <h4 className="text-sm font-medium mb-1">Your Ruling</h4>
-                            <p className="text-sm whitespace-pre-line">
-                              {dispute.ruling}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </CardCustom>
-                ))}
-              </div>
-            ) : (
-              <CardCustom className="glass-card text-center p-12">
-                <CheckCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-xl font-medium mb-2">No Resolved Disputes</h3>
-                <p className="text-muted-foreground">
-                  There are no resolved or dismissed disputes in the system.
-                </p>
-              </CardCustom>
-            )}
-          </TabsContent>
-        </Tabs>
+                    <div className="flex justify-end gap-2">
+                      <ButtonCustom variant="outline" onClick={() => setSelectedDispute(null)}>
+                        Cancel
+                      </ButtonCustom>
+                      <ButtonCustom variant="destructive" onClick={handleDismiss}>
+                        Dismiss Dispute
+                      </ButtonCustom>
+                      <ButtonCustom onClick={handleResolve}>
+                        Resolve Dispute
+                      </ButtonCustom>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Non-Justice Department View */}
+                {(!hasRole('justice_department') || selectedDispute.status !== 'pending') && (
+                  <div className="flex justify-end pt-4 border-t border-white/10">
+                    <ButtonCustom variant="outline" onClick={() => setSelectedDispute(null)}>
+                      Close
+                    </ButtonCustom>
+                  </div>
+                )}
+              </CardContent>
+            </CardCustom>
+          </div>
+        )}
       </div>
     </Layout>
   );

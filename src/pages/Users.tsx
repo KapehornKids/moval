@@ -1,259 +1,322 @@
+import { useState, useEffect } from 'react';
+import Layout from '@/components/layout/Layout';
+import { CardCustom, CardContent, CardHeader, CardTitle } from '@/components/ui/card-custom';
+import { ButtonCustom } from '@/components/ui/button-custom';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { getAnimationClass } from '@/lib/animations';
+import { Filter, Search, User, Shield, Crown } from 'lucide-react';
 
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
-import { UserRound, Shield, Building, Users as UsersIcon } from "lucide-react";
-import Layout from "@/components/layout/Layout";
-import { Button } from "@/components/ui/button";
-import { CardCustom, CardHeader, CardTitle, CardContent } from "@/components/ui/card-custom";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-type UserData = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  user_roles: { role: string }[];
+// Define the role type that matches what's in the database
+type UserRole = {
+  role: string;
 };
 
-const UsersPage = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+// Define the User data structure
+interface UserData {
+  id: string;
+  first_name: string;
+  last_name: string;
+  user_roles: UserRole[];
+}
+
+const Users = () => {
   const [users, setUsers] = useState<UserData[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
+
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
+    if (isAuthenticated) {
+      fetchUsers();
+    }
+  }, [isAuthenticated, roleFilter, searchQuery]);
+
+  // Fetch users function
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true);
+
+      // Fetch profiles and attempt to join with user_roles
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name
+        `);
+
+      if (error) throw error;
+
+      // For each profile, fetch their roles
+      const usersWithRoles = await Promise.all(
+        data.map(async (profile) => {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', profile.id);
+
+          return {
+            ...profile,
+            user_roles: roles || []
+          };
+        })
+      );
+
+      // Apply filters if needed
+      let filteredUsers = usersWithRoles;
       
-      try {
-        // Check if current user is association member or justice department
-        const { data: isAssociation, error: associationError } = await supabase.rpc('has_role', {
-          _user_id: user.id,
-          _role: "association_member" as "user" | "association_member" | "banker" | "justice_department"
-        });
-        
-        const { data: isJustice, error: justiceError } = await supabase.rpc('has_role', {
-          _user_id: user.id,
-          _role: "justice_department" as "user" | "association_member" | "banker" | "justice_department"
-        });
-        
-        if (associationError) throw associationError;
-        if (justiceError) throw justiceError;
-        
-        if (!isAssociation && !isJustice) {
-          toast.error("You don't have permission to view this page");
-          navigate("/dashboard");
-          return;
-        }
-        
-        // Fetch all users
-        const { data: usersData, error: usersError } = await supabase
-          .from("profiles")
-          .select(`
-            id,
-            first_name,
-            last_name,
-            user_roles (
-              role
-            )
-          `);
-          
-        if (usersError) throw usersError;
-        
-        setUsers(usersData || []);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        toast.error("Failed to load users");
-      } finally {
-        setIsLoading(false);
+      if (roleFilter) {
+        filteredUsers = filteredUsers.filter(user => 
+          user.user_roles.some(r => r.role === roleFilter)
+        );
       }
-    };
-    
-    fetchData();
-  }, [user, navigate]);
-  
-  const getUserRoles = (userData: UserData) => {
-    return userData.user_roles.map(role => role.role);
+      
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        filteredUsers = filteredUsers.filter(user => 
+          user.first_name?.toLowerCase().includes(query) || 
+          user.last_name?.toLowerCase().includes(query)
+        );
+      }
+
+      setUsers(filteredUsers as UserData[]);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load users. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="container py-8">
-          <div className="flex justify-center items-center h-64">
-            <p className="text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-      </Layout>
-    );
+
+  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setRoleFilter(e.target.value === 'all' ? null : e.target.value);
+  };
+
+  const handleRoleUpdate = async (userId: string, newRole: string) => {
+    try {
+      // Check if the user already has a role
+      const { data: existingRoles, error: selectError } = await supabase
+        .from('user_roles')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (selectError) throw selectError;
+
+      if (existingRoles && existingRoles.length > 0) {
+        // Update existing role
+        const { error: updateError } = await supabase
+          .from('user_roles')
+          .update({ role: newRole })
+          .eq('user_id', userId);
+
+        if (updateError) throw updateError;
+      } else {
+        // Insert new role
+        const { error: insertError } = await supabase
+          .from('user_roles')
+          .insert({ user_id: userId, role: newRole });
+
+        if (insertError) throw insertError;
+      }
+
+      // Refresh users
+      fetchUsers();
+      toast({
+        title: 'Success',
+        description: 'User role updated successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating role:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update user role. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (!isAuthenticated) {
+    return null;
   }
-  
+
   return (
     <Layout>
-      <div className="container py-8">
-        <h1 className="text-3xl font-bold mb-8">Users Management</h1>
-        
-        <Tabs defaultValue="all">
-          <TabsList className="mb-8">
-            <TabsTrigger value="all" className="flex items-center">
-              <UsersIcon size={16} className="mr-2" />
-              <span>All Users</span>
-            </TabsTrigger>
-            <TabsTrigger value="association" className="flex items-center">
-              <Shield size={16} className="mr-2" />
-              <span>Association</span>
-            </TabsTrigger>
-            <TabsTrigger value="banker" className="flex items-center">
-              <Building size={16} className="mr-2" />
-              <span>Bankers</span>
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="all">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {users.map((userData) => (
-                <CardCustom key={userData.id} className="hover:shadow transition-shadow">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3">
-                        <UserRound size={20} />
+      <div className="container px-4 md:px-6 py-8 md:py-12">
+        <div className="flex flex-col gap-2 mb-8">
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Users</h1>
+          <p className="text-muted-foreground animate-fade-in">
+            Manage user roles and permissions
+          </p>
+        </div>
+
+        {/* Search and Filters */}
+        <CardCustom className={`glass-card mb-6 ${getAnimationClass("fade", 1)}`}>
+          <CardContent className="py-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 glass-effect"
+                />
+              </div>
+              <div className="md:w-auto">
+                <Select onValueChange={(value) => setRoleFilter(value === 'all' ? null : value)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="association_member">Association Member</SelectItem>
+                    <SelectItem value="banker">Banker</SelectItem>
+                    <SelectItem value="justice_department">Justice Department</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ButtonCustom variant="outline" className="md:w-auto">
+                <Filter size={16} className="mr-2" />
+                Filters
+              </ButtonCustom>
+            </div>
+          </CardContent>
+        </CardCustom>
+
+        {/* Users List */}
+        <div className="space-y-4">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <CardCustom key={i} className="animate-pulse">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="h-6 w-32 bg-white/10 rounded"></div>
+                    <div className="h-6 w-48 bg-white/10 rounded"></div>
+                  </div>
+                  <div className="mt-4 h-8 w-full bg-white/10 rounded"></div>
+                </CardContent>
+              </CardCustom>
+            ))
+          ) : users.length > 0 ? (
+            users.map((user) => (
+              <CardCustom key={user.id} className={`glass-card hover:bg-white/5 transition-colors ${getAnimationClass("fade", users.indexOf(user) % 5)}`}>
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                        <User size={18} className="text-primary" />
                       </div>
-                      <CardTitle className="text-lg">
-                        {userData.first_name} {userData.last_name}
-                      </CardTitle>
+                      <div>
+                        <h3 className="font-medium">{user.first_name} {user.last_name}</h3>
+                        <p className="text-xs text-muted-foreground">User ID: {user.id}</p>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {getUserRoles(userData).map((role, idx) => (
-                        <span 
-                          key={idx} 
-                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary"
-                        >
-                          {role}
-                        </span>
-                      ))}
+                    <div>
+                      <Select onValueChange={(newRole) => handleRoleUpdate(user.id, newRole)}>
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue placeholder="Select Role">
+                            {user.user_roles && user.user_roles.length > 0 ? (
+                              user.user_roles[0].role
+                            ) : (
+                              'Select Role'
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="user">User</SelectItem>
+                          <SelectItem value="association_member">Association Member</SelectItem>
+                          <SelectItem value="banker">Banker</SelectItem>
+                          <SelectItem value="justice_department">Justice Department</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full"
-                      onClick={() => navigate(`/profile/${userData.id}`)}
-                    >
-                      View Profile
-                    </Button>
-                  </CardContent>
-                </CardCustom>
-              ))}
-              
-              {users.length === 0 && (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-muted-foreground">No users found</p>
-                </div>
-              )}
+                  </div>
+                </CardContent>
+              </CardCustom>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <div className="mx-auto w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mb-4">
+                <User size={32} className="text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-medium">No Users Found</h3>
+              <p className="text-muted-foreground mt-2 mb-6">
+                No users match your search criteria
+              </p>
+              <ButtonCustom variant="outline" onClick={() => {
+                setSearchQuery('');
+                setRoleFilter(null);
+              }}>
+                Clear Filters
+              </ButtonCustom>
             </div>
-          </TabsContent>
-          
-          <TabsContent value="association">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {users
-                .filter(u => getUserRoles(u).includes("association_member"))
-                .map((userData) => (
-                  <CardCustom key={userData.id} className="hover:shadow transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3">
-                          <Shield size={20} />
-                        </div>
-                        <CardTitle className="text-lg">
-                          {userData.first_name} {userData.last_name}
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {getUserRoles(userData).map((role, idx) => (
-                          <span 
-                            key={idx} 
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary"
-                          >
-                            {role}
-                          </span>
-                        ))}
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full"
-                        onClick={() => navigate(`/profile/${userData.id}`)}
-                      >
-                        View Profile
-                      </Button>
-                    </CardContent>
-                  </CardCustom>
-                ))}
-              
-              {users.filter(u => getUserRoles(u).includes("association_member")).length === 0 && (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-muted-foreground">No association members found</p>
+          )}
+        </div>
+
+        {/* Load More Button */}
+        {users.length > 0 && (
+          <div className="flex justify-center mt-8">
+            <ButtonCustom variant="glass">
+              Load More Users
+            </ButtonCustom>
+          </div>
+        )}
+
+        {/* User Management Information */}
+        <CardCustom className={`glass-card mt-12 ${getAnimationClass("fade", 5)}`}>
+          <CardHeader>
+            <CardTitle>About User Management</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm">
+              Manage user roles and permissions to control access to different features and functionalities within the application.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div className="p-4 rounded-lg bg-white/5">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mb-3">
+                  <Shield size={18} className="text-primary" />
                 </div>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="banker">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {users
-                .filter(u => getUserRoles(u).includes("banker"))
-                .map((userData) => (
-                  <CardCustom key={userData.id} className="hover:shadow transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3">
-                          <Building size={20} />
-                        </div>
-                        <CardTitle className="text-lg">
-                          {userData.first_name} {userData.last_name}
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {getUserRoles(userData).map((role, idx) => (
-                          <span 
-                            key={idx} 
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary"
-                          >
-                            {role}
-                          </span>
-                        ))}
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full"
-                        onClick={() => navigate(`/profile/${userData.id}`)}
-                      >
-                        View Profile
-                      </Button>
-                    </CardContent>
-                  </CardCustom>
-                ))}
-              
-              {users.filter(u => getUserRoles(u).includes("banker")).length === 0 && (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-muted-foreground">No bankers found</p>
+                <h4 className="text-sm font-medium">Secure Access</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Control user access to sensitive data and features based on their assigned roles.
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-white/5">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mb-3">
+                  <Crown size={18} className="text-primary" />
                 </div>
-              )}
+                <h4 className="text-sm font-medium">Role-Based Permissions</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Assign specific roles to users to define their permissions and capabilities.
+                </p>
+              </div>
+              <div className="p-4 rounded-lg bg-white/5">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center mb-3">
+                  <User size={18} className="text-primary" />
+                </div>
+                <h4 className="text-sm font-medium">User Management</h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Easily manage user accounts, roles, and permissions from a centralized dashboard.
+                </p>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </CardCustom>
       </div>
     </Layout>
   );
 };
 
-export default UsersPage;
+export default Users;

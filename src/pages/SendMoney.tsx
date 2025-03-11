@@ -1,539 +1,335 @@
-
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Send, UserRound, Search, X, CreditCard } from "lucide-react";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import Layout from "@/components/layout/Layout";
-import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { 
-  CardCustom, 
-  CardContent, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle, 
-  CardDescription 
-} from "@/components/ui/card-custom";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getAnimationClass } from "@/lib/animations";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { createBlock } from "@/lib/blockchain";
-
-const formSchema = z.object({
-  recipientEmail: z.string().email("Invalid email address"),
-  amount: z.string().refine(
-    (val) => {
-      const num = parseFloat(val);
-      return !isNaN(num) && num > 0;
-    },
-    { message: "Amount must be a positive number" }
-  ),
-  description: z.string().optional(),
-});
-
-type UserProfile = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email?: string;
-};
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Layout from '@/components/layout/Layout';
+import { CardCustom, CardContent, CardHeader, CardTitle } from '@/components/ui/card-custom';
+import { ButtonCustom } from '@/components/ui/button-custom';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useAuth } from '@/hooks/useAuth';
+import { getAnimationClass } from '@/lib/animations';
+import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { ArrowRight, User, DollarSign } from 'lucide-react';
 
 const SendMoney = () => {
+  const [activeTab, setActiveTab] = useState('send');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const { user, updateUserData } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [recipientUser, setRecipientUser] = useState<UserProfile | null>(null);
-  const [lookupPerformed, setLookupPerformed] = useState(false);
-  const [recentRecipients, setRecentRecipients] = useState<UserProfile[]>([]);
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [transactionDetails, setTransactionDetails] = useState<{
-    amount: number;
-    description: string;
-  } | null>(null);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      recipientEmail: "",
-      amount: "",
-      description: "",
-    },
-  });
-
-  // Fetch recent recipients
-  useEffect(() => {
-    const fetchRecentRecipients = async () => {
-      if (!user) return;
-
-      try {
-        // Fetch recent transactions where the user is the sender
-        const { data: transactions, error } = await supabase
-          .from('transactions')
-          .select('receiver_id, created_at')
-          .eq('sender_id', user.id)
-          .eq('transaction_type', 'transfer')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-
-        if (transactions && transactions.length > 0) {
-          // Get unique receiver IDs
-          const uniqueReceiverIds = [...new Set(transactions.map(tx => tx.receiver_id))];
-          
-          // Fetch profiles for these receivers
-          const recipients: UserProfile[] = [];
-          
-          for (const receiverId of uniqueReceiverIds) {
-            if (!receiverId) continue;
-            
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('id, first_name, last_name')
-              .eq('id', receiverId)
-              .single();
-              
-            if (profileError) {
-              console.error("Error fetching profile:", profileError);
-              continue;
-            }
-            
-            if (profile) {
-              // Fetch email from auth.users (if you have access)
-              const { data: userData, error: userError } = await supabase
-                .rpc('get_user_email', { user_id: profile.id });
-                
-              recipients.push({
-                id: profile.id,
-                first_name: profile.first_name || '',
-                last_name: profile.last_name || '',
-                email: userData?.email
-              });
-            }
-          }
-          
-          setRecentRecipients(recipients);
-        }
-      } catch (error) {
-        console.error("Error fetching recent recipients:", error);
-      }
-    };
-
-    if (user) {
-      fetchRecentRecipients();
-    }
-  }, [user]);
-
-  const lookupRecipient = async (email: string) => {
-    if (!email) return;
-
+  // Function to get user info by email
+  const getUserByEmail = async (email: string) => {
     try {
-      // This is a custom RPC function that looks up a user by email
-      const { data: userData, error: userError } = await supabase
-        .rpc('get_user_by_email', { email_address: email });
-
-      if (userError || !userData) {
-        setRecipientUser(null);
-        setLookupPerformed(true);
-        return;
-      }
-
-      if (userData) {
-        // Get the user's profile data
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', userData.id)
-          .single();
-
-        if (profileError || !profileData) {
-          setRecipientUser(null);
-          setLookupPerformed(true);
-          return;
-        }
-
-        setRecipientUser({
-          id: userData.id,
-          first_name: profileData.first_name || '',
-          last_name: profileData.last_name || '',
-          email: email
-        });
+      const { data: userProfiles, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name
+        `)
+        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+      
+      if (error) throw error;
+      
+      if (userProfiles && userProfiles.length > 0) {
+        const user = userProfiles[0];
+        return {
+          id: user.id,
+          name: `${user.first_name} ${user.last_name}`.trim() || 'User'
+        };
       } else {
-        setRecipientUser(null);
+        return null;
       }
     } catch (error) {
-      console.error("Error in recipient lookup:", error);
-      setRecipientUser(null);
-    } finally {
-      setLookupPerformed(true);
+      console.error('Error getting user by email:', error);
+      return null;
     }
   };
 
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "recipientEmail" && value.recipientEmail && value.recipientEmail.includes('@')) {
-        lookupRecipient(value.recipientEmail);
+  // Function to get user email by ID
+  const getUserEmailById = async (userId: string) => {
+    try {
+      const { data: user } = await supabase.auth.getUser();
+      if (user && user.user) {
+        return user.user.email;
       }
-    });
-    
-    return () => subscription.unsubscribe();
-  }, [form.watch]);
+      return null;
+    } catch (error) {
+      console.error('Error getting user email by ID:', error);
+      return null;
+    }
+  };
 
-  const selectRecentRecipient = (recipient: UserProfile) => {
-    if (!recipient.email) {
-      toast.error("Email for this recipient is not available");
+  // Handle user selection
+  const handleUserSelect = (user) => {
+    setSelectedUser(user);
+    setSearchResults([]);
+    setSearchTerm('');
+  };
+
+  // Handle send money
+  const handleSend = async () => {
+    if (!selectedUser) {
+      toast({
+        title: 'Error',
+        description: 'Please select a user to send money to.',
+        variant: 'destructive',
+      });
       return;
     }
-    
-    form.setValue('recipientEmail', recipient.email);
-    setRecipientUser(recipient);
-    setLookupPerformed(true);
-  };
 
-  const confirmTransaction = (values: z.infer<typeof formSchema>) => {
-    // Set transaction details and open confirm dialog
-    setTransactionDetails({
-      amount: parseFloat(values.amount),
-      description: values.description || 'Transfer'
-    });
-    setIsConfirmOpen(true);
-  };
+    if (!amount) {
+      toast({
+        title: 'Error',
+        description: 'Please enter an amount to send.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  const executeTransaction = async () => {
-    if (!user || !recipientUser || !transactionDetails) return;
+    setIsSending(true);
 
-    setIsSubmitting(true);
-    setIsConfirmOpen(false);
-    
     try {
-      const amount = transactionDetails.amount;
-      
-      // Check if user has enough balance
-      const { data: walletData, error: walletError } = await supabase
-        .from('wallets')
-        .select('balance')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (walletError) {
-        throw new Error('Could not retrieve your wallet balance');
-      }
-      
-      if (walletData.balance < amount) {
-        toast.error('Insufficient funds in your wallet');
-        return;
-      }
-      
-      // Create the transaction
-      const { data: transactionData, error: transactionError } = await supabase
+      const amountNumber = parseFloat(amount);
+
+      // Get sender and receiver IDs
+      const senderId = (await supabase.auth.getUser()).data.user?.id;
+      const receiverId = selectedUser.id;
+
+      // Create transaction
+      const { data: transaction, error: transactionError } = await supabase
         .from('transactions')
-        .insert({
-          sender_id: user.id,
-          receiver_id: recipientUser.id,
-          amount,
-          description: transactionDetails.description,
-          transaction_type: 'transfer'
-        })
+        .insert([
+          {
+            sender_id: senderId,
+            receiver_id: receiverId,
+            amount: amountNumber,
+            description: description || 'Money Transfer',
+            transaction_type: 'transfer',
+            status: 'pending',
+          },
+        ])
         .select()
         .single();
-      
-      if (transactionError) {
-        throw new Error('Failed to create transaction');
-      }
-      
-      // Update the sender's wallet (subtract amount)
-      const { error: senderUpdateError } = await supabase
-        .from('wallets')
-        .update({ balance: walletData.balance - amount })
-        .eq('user_id', user.id);
-      
-      if (senderUpdateError) {
-        throw new Error('Failed to update your wallet');
-      }
-      
-      // Get recipient's wallet balance
-      const { data: recipientWalletData, error: recipientWalletError } = await supabase
-        .from('wallets')
-        .select('balance')
-        .eq('user_id', recipientUser.id)
-        .single();
-        
-      if (recipientWalletError) {
-        throw new Error('Failed to retrieve recipient wallet');
-      }
-      
-      // Update the recipient's wallet (add amount)
-      const { error: recipientUpdateError } = await supabase
-        .from('wallets')
-        .update({ balance: recipientWalletData.balance + amount })
-        .eq('user_id', recipientUser.id);
-      
-      if (recipientUpdateError) {
-        throw new Error('Failed to update recipient wallet');
-      }
-      
-      // Add to blockchain
-      if (transactionData) {
-        // Create a new block for this transaction
-        const block = await createBlock([transactionData]);
-        if (!block) {
-          console.warn("Could not add transaction to blockchain");
-        }
-      }
-      
-      // Update the user's wallet balance
-      await updateUserData();
-      
-      toast.success(`Successfully sent ${amount} Movals to ${recipientUser.first_name} ${recipientUser.last_name}`);
-      
+
+      if (transactionError) throw transactionError;
+
+      toast({
+        title: 'Success',
+        description: `Successfully sent ${amount} Movals to ${selectedUser.name}.`,
+      });
+
       // Reset form
-      form.reset();
-      setRecipientUser(null);
-      setLookupPerformed(false);
-      
-      // Redirect back to dashboard
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error('Transaction error:', error);
-      toast.error(error.message || 'Failed to complete transaction');
+      setSelectedUser(null);
+      setAmount('');
+      setDescription('');
+    } catch (error) {
+      console.error('Error sending money:', error);
+      toast({
+        title: 'Error',
+        description: 'Unable to send money. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
-      setIsSubmitting(false);
+      setIsSending(false);
     }
   };
 
-  const handleGoBack = () => {
-    navigate(-1);
+  // Handle amount change
+  const handleAmountChange = (e) => {
+    const value = e.target.value;
+    // Allow only numbers and one decimal point
+    if (/^\d*\.?\d*$/.test(value)) {
+      setAmount(value);
+    }
   };
 
-  if (!user) {
-    navigate('/login');
+  // Function to handle user search
+  const handleUserSearch = async () => {
+    try {
+      setIsSearching(true);
+      
+      // Direct query to profiles table
+      const { data: userProfiles, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name
+        `)
+        .ilike('first_name', `%${searchTerm}%`)
+        .order('first_name', { ascending: true })
+        .limit(5);
+      
+      if (error) throw error;
+      
+      const formattedUsers = await Promise.all(
+        userProfiles.map(async (user) => {
+          const email = await getUserEmailById(user.id);
+          return {
+            id: user.id,
+            name: `${user.first_name} ${user.last_name}`.trim() || 'User',
+            email: email || 'No email'
+          };
+        })
+      );
+      
+      setSearchResults(formattedUsers);
+    } catch (error) {
+      console.error('Error searching users:', error);
+      toast({
+        title: 'Error',
+        description: 'Unable to search for users. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login to send money",
+        variant: "destructive",
+      });
+      navigate("/login");
+    }
+  }, [isAuthenticated, navigate]);
+
+  if (!isAuthenticated) {
     return null;
   }
 
   return (
     <Layout>
-      <div className="container max-w-lg mx-auto py-8 px-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-6"
-          onClick={handleGoBack}
-        >
-          <ArrowLeft size={16} className="mr-2" /> Back
-        </Button>
-        
-        <CardCustom className={getAnimationClass("fade", 1)}>
-          <CardHeader>
-            <CardTitle className="text-xl font-semibold flex items-center">
-              <Send size={20} className="mr-2" /> Send Movals
-            </CardTitle>
-            <CardDescription>
-              Transfer Movals to another user in the community
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentRecipients.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-medium mb-3">Recent Recipients</h3>
-                <div className="flex flex-wrap gap-2">
-                  {recentRecipients.map((recipient) => (
-                    <button
-                      key={recipient.id}
-                      onClick={() => selectRecentRecipient(recipient)}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
-                    >
-                      <Avatar className="h-5 w-5">
-                        <AvatarFallback className="text-xs">
-                          {recipient.first_name?.[0]}{recipient.last_name?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm">
-                        {recipient.first_name} {recipient.last_name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <Separator className="my-4" />
-              </div>
-            )}
-            
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(confirmTransaction)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="recipientEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Recipient Email</FormLabel>
-                      <div className="relative">
-                        <FormControl>
-                          <Input 
-                            placeholder="user@example.com" 
-                            {...field} 
-                            className="pl-10" 
-                          />
-                        </FormControl>
-                        <Search size={16} className="absolute left-3 top-3 text-muted-foreground" />
-                        {field.value && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              field.onChange("");
-                              setRecipientUser(null);
-                              setLookupPerformed(false);
-                            }}
-                            className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
-                          >
-                            <X size={16} />
-                          </button>
-                        )}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {lookupPerformed && (
-                  <div className="py-2">
-                    {recipientUser ? (
-                      <div className="flex items-center p-3 bg-primary/10 rounded-lg">
-                        <Avatar className="h-8 w-8 mr-3">
-                          <AvatarFallback className="bg-primary text-primary-foreground">
-                            {recipientUser.first_name?.[0]}{recipientUser.last_name?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <span className="font-medium">
-                            {recipientUser.first_name} {recipientUser.last_name}
-                          </span>
-                          <p className="text-xs text-muted-foreground">{recipientUser.email}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center p-3 bg-destructive/10 text-destructive rounded-lg">
-                        <UserRound size={18} className="mr-2" />
-                        <span className="text-sm">Recipient not found. Please check the email address.</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                <FormField
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Amount (M)</FormLabel>
-                      <div className="relative">
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="0.00"
-                            step="0.01"
-                            min="0.01"
-                            {...field}
-                            className="pl-10"
-                          />
-                        </FormControl>
-                        <CreditCard size={16} className="absolute left-3 top-3 text-muted-foreground" />
-                      </div>
-                      <FormMessage />
-                      {user && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Available balance: {user.walletBalance} M
-                        </p>
-                      )}
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description (Optional)</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="What's this for?" {...field} className="min-h-20" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={isSubmitting || !recipientUser}
-                >
-                  Continue to Review
-                  <ArrowRight size={16} className="ml-2" />
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </CardCustom>
+      <div className="container px-4 md:px-6 py-8 md:py-12">
+        <div className="flex flex-col gap-2 mb-8">
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Send Money</h1>
+          <p className="text-muted-foreground animate-fade-in">
+            Send money to other users in the Moval Society
+          </p>
+        </div>
 
-        {/* Confirmation Dialog */}
-        <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Confirm Transaction</DialogTitle>
-              <DialogDescription>
-                Please review the transaction details before sending
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="flex justify-between p-3 border rounded-lg glass-card">
-                <span className="text-muted-foreground">Amount</span>
-                <span className="font-medium">{transactionDetails?.amount} Movals</span>
-              </div>
-              <div className="flex justify-between p-3 border rounded-lg glass-card">
-                <span className="text-muted-foreground">To</span>
-                <span className="font-medium">
-                  {recipientUser?.first_name} {recipientUser?.last_name}
-                </span>
-              </div>
-              <div className="flex justify-between p-3 border rounded-lg glass-card">
-                <span className="text-muted-foreground">Description</span>
-                <span>{transactionDetails?.description || 'Transfer'}</span>
-              </div>
-              <div className="flex justify-between p-3 border rounded-lg glass-card">
-                <span className="text-muted-foreground">Fee</span>
-                <span>0 Movals</span>
-              </div>
-            </div>
-            <div className="flex justify-between mt-4">
-              <Button variant="outline" onClick={() => setIsConfirmOpen(false)}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={executeTransaction}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Processing...' : 'Confirm & Send'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Tabs defaultValue="send" className={`w-full ${getAnimationClass("fade", 1)}`}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="send" onClick={() => setActiveTab('send')}>Send Money</TabsTrigger>
+            <TabsTrigger value="request" onClick={() => setActiveTab('request')}>Request Money</TabsTrigger>
+          </TabsList>
+          <TabsContent value="send">
+            <CardCustom className="glass-card">
+              <CardHeader>
+                <CardTitle>Send Movals</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4">
+                  <Label htmlFor="search">Search User</Label>
+                  <div className="relative">
+                    <Input
+                      id="search"
+                      placeholder="Enter a name to search for a user..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleUserSearch();
+                        }
+                      }}
+                      className="glass-effect"
+                    />
+                    <ButtonCustom
+                      variant="secondary"
+                      size="sm"
+                      className="absolute right-1 top-1 rounded-md"
+                      onClick={handleUserSearch}
+                      disabled={isSearching}
+                    >
+                      {isSearching ? 'Searching...' : <Search className="w-4 h-4 mr-2" />}
+                    </ButtonCustom>
+                  </div>
+                  {searchResults.length > 0 && (
+                    <div className="mt-2">
+                      <Label>Search Results</Label>
+                      <Select onValueChange={(value) => {
+                        const user = searchResults.find(user => user.id === value);
+                        handleUserSelect(user);
+                      }}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a user" value={selectedUser?.id} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {searchResults.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              <div className="flex items-center space-x-2">
+                                <User className="w-4 h-4" />
+                                <span>{user.name} ({user.email})</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {selectedUser && (
+                    <div className="mt-2 p-3 rounded-md bg-muted/50">
+                      <Label>Selected User</Label>
+                      <div className="flex items-center space-x-2">
+                        <User className="w-4 h-4" />
+                        <span>{selectedUser.name}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="grid gap-4">
+                  <Label htmlFor="amount">Amount (Movals)</Label>
+                  <Input
+                    id="amount"
+                    placeholder="Enter amount"
+                    type="number"
+                    value={amount}
+                    onChange={handleAmountChange}
+                    className="glass-effect"
+                  />
+                </div>
+                <div className="grid gap-4">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Enter description (optional)"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="glass-effect"
+                  />
+                </div>
+                <ButtonCustom onClick={handleSend} disabled={isSending} className="w-full">
+                  {isSending ? 'Sending...' : 'Send Money'}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </ButtonCustom>
+              </CardContent>
+            </CardCustom>
+          </TabsContent>
+          <TabsContent value="request">
+            <CardCustom className="glass-card">
+              <CardHeader>
+                <CardTitle>Request Movals (Coming Soon)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">This feature is coming soon!</p>
+              </CardContent>
+            </CardCustom>
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );
