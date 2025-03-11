@@ -17,6 +17,10 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Users from "./pages/Users";
 import Association from "./pages/Association";
+import Loans from "./pages/Loans";
+import Voting from "./pages/Voting";
+import Chainbook from "./pages/Chainbook";
+import Justice from "./pages/Justice";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +44,10 @@ const App = () => (
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/users" element={<Users />} />
             <Route path="/association" element={<Association />} />
+            <Route path="/loans" element={<Loans />} />
+            <Route path="/voting" element={<Voting />} />
+            <Route path="/chainbook" element={<Chainbook />} />
+            <Route path="/justice" element={<Justice />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

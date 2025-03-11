@@ -2,608 +2,412 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
-import { supabase } from "@/integrations/supabase/client";
-import { CardCustom, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card-custom";
-import { Button } from "@/components/ui/button";
+import { CardCustom, CardContent, CardHeader, CardTitle } from "@/components/ui/card-custom";
+import { ButtonCustom } from "@/components/ui/button-custom";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Plus, Check, X, Clock, DollarSign, PercentIcon, CalendarIcon, 
-  CheckCircle, AlertCircle, ArrowRight, Hourglass
-} from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { getAnimationClass } from "@/lib/animations";
+import { toast } from "@/hooks/use-toast";
+import { Landmark, Clock, ArrowUpRight, CheckCircle, XCircle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
+// Define the loan status type to match the DB
+type LoanStatus = "pending" | "approved" | "rejected" | "paid";
+
+// Define the loan type
 interface Loan {
   id: string;
+  user_id: string;
   amount: number;
   interest_rate: number;
-  user_id: string;
-  status: "pending" | "approved" | "rejected" | "paid";
   purpose: string;
   repayment_due_date: string | null;
+  status: LoanStatus;
   created_at: string;
   updated_at: string;
 }
 
-interface LoanRepayment {
-  id: string;
-  loan_id: string;
-  amount: number;
-  created_at: string;
-  transaction_id: string | null;
-}
-
 const Loans = () => {
   const [loans, setLoans] = useState<Loan[]>([]);
-  const [repayments, setRepayments] = useState<Record<string, LoanRepayment[]>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
-  const [isRepayDialogOpen, setIsRepayDialogOpen] = useState(false);
-  const [selectedLoanForRepayment, setSelectedLoanForRepayment] = useState<Loan | null>(null);
+  const [showApplyForm, setShowApplyForm] = useState(false);
   
-  const [loanAmount, setLoanAmount] = useState("");
-  const [loanPurpose, setLoanPurpose] = useState("");
-  const [repaymentAmount, setRepaymentAmount] = useState("");
-
-  const { isAuthenticated, user, updateUserData } = useAuth();
-  const { toast } = useToast();
+  // Form state
+  const [amount, setAmount] = useState<number>(100);
+  const [purpose, setPurpose] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-
-  // Load loans
+  
+  // Fetch loans
   useEffect(() => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to view your loans",
-        variant: "destructive",
-      });
-      navigate("/login");
-      return;
-    }
-
     const fetchLoans = async () => {
+      if (!user) return;
+      
       try {
         setIsLoading(true);
         const { data, error } = await supabase
           .from('loans')
           .select('*')
-          .eq('user_id', user?.id)
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false });
-
+          
         if (error) throw error;
-        setLoans(data || []);
-
-        // Fetch repayments for each loan
-        if (data && data.length > 0) {
-          const repaymentData: Record<string, LoanRepayment[]> = {};
-          
-          await Promise.all(data.map(async (loan) => {
-            const { data: loanRepayments, error: repaymentError } = await supabase
-              .from('loan_repayments')
-              .select('*')
-              .eq('loan_id', loan.id)
-              .order('created_at', { ascending: false });
-              
-            if (!repaymentError && loanRepayments) {
-              repaymentData[loan.id] = loanRepayments;
-            }
-          }));
-          
-          setRepayments(repaymentData);
-        }
-      } catch (error: any) {
-        console.error("Error fetching loans:", error);
+        
+        // Convert the data to the correct type
+        const typedLoans = data.map(loan => ({
+          ...loan,
+          status: loan.status as LoanStatus
+        }));
+        
+        setLoans(typedLoans);
+      } catch (error) {
+        console.error('Error fetching loans:', error);
         toast({
           title: "Error",
-          description: "Failed to load loan data",
+          description: "Unable to fetch loans. Please try again.",
           variant: "destructive",
         });
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchLoans();
-  }, [isAuthenticated, navigate, toast, user?.id]);
-
+    
+    if (isAuthenticated) {
+      fetchLoans();
+    }
+  }, [user, isAuthenticated]);
+  
   // Apply for a loan
-  const handleApplyForLoan = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!user) return;
     
+    if (!amount || !purpose) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
-      const amountNum = parseFloat(loanAmount);
+      setIsSubmitting(true);
       
-      if (isNaN(amountNum) || amountNum <= 0) {
-        toast({
-          title: "Invalid amount",
-          description: "Please enter a valid loan amount",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const { data, error } = await supabase
         .from('loans')
         .insert([
           {
             user_id: user.id,
-            amount: amountNum,
+            amount,
             interest_rate: 5.0, // Default interest rate
-            status: 'pending',
-            purpose: loanPurpose || 'General purpose',
+            purpose,
+            status: 'pending' as LoanStatus,
           }
         ])
         .select();
-
+        
       if (error) throw error;
-
+      
       toast({
         title: "Loan Application Submitted",
-        description: "Your loan application is now pending approval",
+        description: "Your loan application has been received and is pending review.",
       });
-
-      setLoans(prev => [...prev, data[0]]);
-      setIsApplyDialogOpen(false);
-      setLoanAmount("");
-      setLoanPurpose("");
-    } catch (error: any) {
-      console.error("Error applying for loan:", error);
+      
+      // Update loans list
+      if (data) {
+        setLoans(prev => [...data.map(loan => ({
+          ...loan,
+          status: loan.status as LoanStatus
+        })), ...prev]);
+      }
+      
+      // Reset form
+      setAmount(100);
+      setPurpose('');
+      setShowApplyForm(false);
+    } catch (error) {
+      console.error('Error applying for loan:', error);
       toast({
         title: "Application Failed",
-        description: error.message || "There was an error submitting your loan application",
+        description: "Unable to submit your loan application. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  // Make a loan repayment
-  const handleRepayLoan = async () => {
-    if (!user || !selectedLoanForRepayment) return;
-    
-    try {
-      const amountNum = parseFloat(repaymentAmount);
-      
-      if (isNaN(amountNum) || amountNum <= 0) {
-        toast({
-          title: "Invalid amount",
-          description: "Please enter a valid repayment amount",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (amountNum > user.walletBalance) {
-        toast({
-          title: "Insufficient balance",
-          description: "You don't have enough Movals in your wallet",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Create a transaction for the repayment
-      const { data: transactionData, error: transactionError } = await supabase
-        .from('transactions')
-        .insert([
-          {
-            sender_id: user.id,
-            receiver_id: null, // System account (bank)
-            amount: amountNum,
-            status: 'completed',
-            transaction_type: 'loan_repayment',
-            description: `Loan repayment for loan #${selectedLoanForRepayment.id.slice(0, 8)}`
-          }
-        ])
-        .select();
-
-      if (transactionError) throw transactionError;
-
-      // Record the repayment
-      const { data, error } = await supabase
-        .from('loan_repayments')
-        .insert([
-          {
-            loan_id: selectedLoanForRepayment.id,
-            amount: amountNum,
-            transaction_id: transactionData[0].id
-          }
-        ])
-        .select();
-
-      if (error) throw error;
-
-      // Update the loan status if fully repaid
-      const totalRepaid = Object.values(repayments[selectedLoanForRepayment.id] || [])
-        .reduce((sum, repayment) => sum + repayment.amount, 0) + amountNum;
-        
-      if (totalRepaid >= selectedLoanForRepayment.amount) {
-        const { error: updateError } = await supabase
-          .from('loans')
-          .update({ status: 'paid' })
-          .eq('id', selectedLoanForRepayment.id);
-          
-        if (updateError) throw updateError;
-        
-        // Update loans list with the new status
-        setLoans(prev => prev.map(loan => 
-          loan.id === selectedLoanForRepayment.id ? {...loan, status: 'paid'} : loan
-        ));
-      }
-
+  
+  // Format date for display
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Not set';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+  
+  // Get status badge class
+  const getStatusBadge = (status: LoanStatus) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-100/20 text-yellow-500 border border-yellow-500/20';
+      case 'approved':
+        return 'bg-green-100/20 text-green-500 border border-green-500/20';
+      case 'rejected':
+        return 'bg-red-100/20 text-red-500 border border-red-500/20';
+      case 'paid':
+        return 'bg-blue-100/20 text-blue-500 border border-blue-500/20';
+      default:
+        return 'bg-gray-100/20 text-gray-500 border border-gray-500/20';
+    }
+  };
+  
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
       toast({
-        title: "Repayment Successful",
-        description: `You've repaid ${amountNum} Movals on your loan`,
-      });
-
-      // Update repayments list
-      setRepayments(prev => ({
-        ...prev,
-        [selectedLoanForRepayment.id]: [data[0], ...(prev[selectedLoanForRepayment.id] || [])]
-      }));
-
-      // Update user wallet balance
-      await updateUserData();
-
-      setIsRepayDialogOpen(false);
-      setRepaymentAmount("");
-      setSelectedLoanForRepayment(null);
-    } catch (error: any) {
-      console.error("Error making repayment:", error);
-      toast({
-        title: "Repayment Failed",
-        description: error.message || "There was an error processing your repayment",
+        title: "Authentication Required",
+        description: "Please login to access loans",
         variant: "destructive",
       });
+      navigate("/login");
     }
-  };
-
-  // Calculate the total amount paid for a loan
-  const getTotalRepaid = (loanId: string) => {
-    return (repayments[loanId] || []).reduce((total, repayment) => total + repayment.amount, 0);
-  };
-
-  // Calculate the remaining amount for a loan
-  const getRemainingAmount = (loan: Loan) => {
-    const totalRepaid = getTotalRepaid(loan.id);
-    const totalDue = loan.amount * (1 + loan.interest_rate / 100);
-    return Math.max(0, totalDue - totalRepaid);
-  };
-
-  // Get progress percentage for a loan
-  const getRepaymentProgress = (loan: Loan) => {
-    const totalRepaid = getTotalRepaid(loan.id);
-    const totalDue = loan.amount * (1 + loan.interest_rate / 100);
-    return Math.min(100, Math.round((totalRepaid / totalDue) * 100));
-  };
-
+  }, [isAuthenticated, isLoading, navigate]);
+  
+  if (!isAuthenticated && !isLoading) {
+    return null;
+  }
+  
   return (
     <Layout>
-      <div className="container px-4 pt-8 pb-16">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Loan Center</h1>
-            <p className="text-muted-foreground">
-              Apply for loans and manage your repayments
-            </p>
-          </div>
-          
-          <Dialog open={isApplyDialogOpen} onOpenChange={setIsApplyDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="glass-button">
-                <Plus size={16} className="mr-2" />
-                Apply for Loan
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="glass-card max-w-md">
-              <DialogHeader>
-                <DialogTitle>Apply for a Loan</DialogTitle>
-                <DialogDescription>
-                  Fill out this form to request a loan from MBMQ bank
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Loan Amount (in Movals)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="amount"
-                      type="number"
-                      min="1"
-                      placeholder="Enter amount"
-                      className="pl-10"
-                      value={loanAmount}
-                      onChange={(e) => setLoanAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="purpose">Purpose</Label>
-                  <Textarea
-                    id="purpose"
-                    placeholder="Describe the purpose of your loan"
-                    value={loanPurpose}
-                    onChange={(e) => setLoanPurpose(e.target.value)}
-                  />
-                </div>
-                
-                <div className="bg-primary/10 p-3 rounded-lg">
-                  <h4 className="font-medium mb-1">Loan Terms</h4>
-                  <ul className="text-sm text-muted-foreground space-y-1">
-                    <li className="flex items-center gap-2">
-                      <PercentIcon size={14} />
-                      Interest Rate: 5.0%
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <CalendarIcon size={14} />
-                      Repayment: Flexible schedule
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsApplyDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleApplyForLoan}>
-                  Submit Application
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+      <div className="container px-4 md:px-6 py-8 md:py-12">
+        <div className="flex flex-col gap-2 mb-8">
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Loans</h1>
+          <p className="text-muted-foreground animate-fade-in">
+            Apply for loans and manage your loan repayments
+          </p>
         </div>
         
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[...Array(2)].map((_, i) => (
-              <CardCustom key={i} className="glass-card animate-pulse">
-                <CardHeader>
-                  <div className="h-6 w-48 bg-primary/20 rounded"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="h-4 w-full bg-primary/20 rounded"></div>
-                    <div className="h-4 w-3/4 bg-primary/20 rounded"></div>
-                    <div className="h-4 w-1/2 bg-primary/20 rounded"></div>
-                  </div>
-                </CardContent>
-              </CardCustom>
-            ))}
-          </div>
-        ) : loans.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {loans.map((loan) => (
-              <CardCustom key={loan.id} className="glass-card overflow-hidden">
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-center">
-                    <CardTitle className="text-xl">
-                      {loan.amount} M Loan
-                    </CardTitle>
-                    <div className={cn(
-                      "px-3 py-1 text-xs rounded-full",
-                      loan.status === 'approved' ? "bg-green-500/20 text-green-300" :
-                      loan.status === 'pending' ? "bg-yellow-500/20 text-yellow-300" :
-                      loan.status === 'paid' ? "bg-blue-500/20 text-blue-300" :
-                      "bg-red-500/20 text-red-300"
-                    )}>
-                      {loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}
-                    </div>
-                  </div>
-                  <CardDescription>
-                    Applied on {format(new Date(loan.created_at), "MMMM d, yyyy")}
-                  </CardDescription>
-                </CardHeader>
-                
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between text-sm">
-                      <div className="text-muted-foreground">Interest Rate</div>
-                      <div className="font-medium">{loan.interest_rate}%</div>
-                    </div>
-                    
-                    <div className="flex justify-between text-sm">
-                      <div className="text-muted-foreground">Total With Interest</div>
-                      <div className="font-medium">
-                        {(loan.amount * (1 + loan.interest_rate / 100)).toFixed(2)} M
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Loan List */}
+            <CardCustom className={getAnimationClass("fade", 1)}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-xl">Your Loans</CardTitle>
+                <ButtonCustom 
+                  variant="glass" 
+                  size="sm" 
+                  onClick={() => setShowApplyForm(!showApplyForm)}
+                >
+                  {showApplyForm ? "Cancel" : "Apply for Loan"}
+                </ButtonCustom>
+              </CardHeader>
+              <CardContent>
+                {showApplyForm && (
+                  <div className="mb-6 glass-card p-4">
+                    <h3 className="text-lg font-medium mb-4">New Loan Application</h3>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="amount">Loan Amount (Movals)</Label>
+                        <Input
+                          id="amount"
+                          type="number"
+                          min="10"
+                          value={amount}
+                          onChange={(e) => setAmount(parseFloat(e.target.value))}
+                          className="glass-effect"
+                          required
+                        />
                       </div>
-                    </div>
-                    
-                    {loan.repayment_due_date && (
-                      <div className="flex justify-between text-sm">
-                        <div className="text-muted-foreground">Due Date</div>
-                        <div className="font-medium">
-                          {format(new Date(loan.repayment_due_date), "MMMM d, yyyy")}
-                        </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="purpose">Loan Purpose</Label>
+                        <Textarea
+                          id="purpose"
+                          value={purpose}
+                          onChange={(e) => setPurpose(e.target.value)}
+                          placeholder="Describe why you need this loan..."
+                          className="glass-effect min-h-24"
+                          required
+                        />
                       </div>
-                    )}
-                    
-                    {loan.status === 'approved' || loan.status === 'paid' ? (
-                      <>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm mb-1">
-                            <div className="text-muted-foreground">Repayment Progress</div>
-                            <div className="font-medium">{getRepaymentProgress(loan)}%</div>
-                          </div>
-                          <div className="h-2 bg-primary/20 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary rounded-full" 
-                              style={{ width: `${getRepaymentProgress(loan)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-between text-sm">
-                          <div className="text-muted-foreground">Remaining</div>
-                          <div className="font-medium">
-                            {getRemainingAmount(loan).toFixed(2)} M
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
-                    
-                    {loan.purpose && (
-                      <div className="pt-2 border-t border-white/10">
-                        <h4 className="text-sm font-medium mb-1">Purpose</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {loan.purpose}
-                        </p>
+                      <div className="text-sm text-muted-foreground">
+                        <p>Default interest rate: 5.0%</p>
                       </div>
-                    )}
-                    
-                    {loan.status === 'approved' && repayments[loan.id] && repayments[loan.id].length > 0 && (
-                      <div className="pt-2 border-t border-white/10">
-                        <h4 className="text-sm font-medium mb-2">Recent Repayments</h4>
-                        <div className="space-y-2">
-                          {repayments[loan.id].slice(0, 2).map((repayment) => (
-                            <div key={repayment.id} className="flex justify-between text-xs bg-black/20 p-2 rounded">
-                              <span>{format(new Date(repayment.created_at), "MMM d, yyyy")}</span>
-                              <span className="font-medium text-green-400">+{repayment.amount} M</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-                
-                <CardFooter className="border-t border-white/10 pt-4">
-                  {loan.status === 'pending' && (
-                    <div className="w-full flex justify-center">
-                      <div className="flex items-center gap-2 text-yellow-300">
-                        <Hourglass size={16} />
-                        <span className="text-sm">Awaiting approval</span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  {loan.status === 'approved' && (
-                    <Dialog open={isRepayDialogOpen && selectedLoanForRepayment?.id === loan.id} 
-                      onOpenChange={(open) => {
-                        setIsRepayDialogOpen(open);
-                        if (!open) setSelectedLoanForRepayment(null);
-                      }}>
-                      <DialogTrigger asChild>
-                        <Button 
-                          className="w-full glass-button"
-                          onClick={() => setSelectedLoanForRepayment(loan)}
+                      <div className="flex justify-end">
+                        <ButtonCustom
+                          type="submit"
+                          loading={isSubmitting}
                         >
-                          Make Repayment
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="glass-card max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Make a Loan Repayment</DialogTitle>
-                          <DialogDescription>
-                            Your current wallet balance: {user?.walletBalance} M
-                          </DialogDescription>
-                        </DialogHeader>
-                        
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="repaymentAmount">Repayment Amount</Label>
-                            <div className="relative">
-                              <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                              <Input
-                                id="repaymentAmount"
-                                type="number"
-                                min="0.1"
-                                step="0.1"
-                                max={user?.walletBalance}
-                                placeholder="Enter amount"
-                                className="pl-10"
-                                value={repaymentAmount}
-                                onChange={(e) => setRepaymentAmount(e.target.value)}
-                              />
-                            </div>
+                          Submit Application
+                        </ButtonCustom>
+                      </div>
+                    </form>
+                  </div>
+                )}
+                
+                <div className="space-y-4">
+                  {isLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="p-4 rounded-lg glass-effect flex flex-col gap-2 animate-pulse">
+                        <div className="h-6 w-32 bg-white/10 rounded"></div>
+                        <div className="h-4 w-48 bg-white/10 rounded"></div>
+                        <div className="flex gap-4 mt-2">
+                          <div className="h-8 w-24 bg-white/10 rounded"></div>
+                          <div className="h-8 w-24 bg-white/10 rounded"></div>
+                        </div>
+                      </div>
+                    ))
+                  ) : loans.length > 0 ? (
+                    loans.map((loan) => (
+                      <div key={loan.id} className="p-4 rounded-lg glass-card space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Landmark className="h-5 w-5 text-primary" />
+                            <h3 className="font-medium text-lg">{loan.amount} Movals</h3>
                           </div>
-                          
-                          <div className="bg-primary/10 p-3 rounded-lg">
-                            <h4 className="font-medium mb-1">Repayment Summary</h4>
-                            <ul className="text-sm text-muted-foreground space-y-1">
-                              <li className="flex justify-between">
-                                <span>Original Loan</span>
-                                <span>{loan.amount} M</span>
-                              </li>
-                              <li className="flex justify-between">
-                                <span>With Interest</span>
-                                <span>{(loan.amount * (1 + loan.interest_rate / 100)).toFixed(2)} M</span>
-                              </li>
-                              <li className="flex justify-between">
-                                <span>Already Paid</span>
-                                <span>{getTotalRepaid(loan.id)} M</span>
-                              </li>
-                              <li className="flex justify-between font-medium">
-                                <span>Remaining</span>
-                                <span>{getRemainingAmount(loan).toFixed(2)} M</span>
-                              </li>
-                            </ul>
-                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs ${getStatusBadge(loan.status)}`}>
+                            {loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}
+                          </span>
                         </div>
                         
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => {
-                            setIsRepayDialogOpen(false);
-                            setSelectedLoanForRepayment(null);
-                          }}>
-                            Cancel
-                          </Button>
-                          <Button onClick={handleRepayLoan}>
-                            Confirm Repayment
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                  
-                  {loan.status === 'paid' && (
-                    <div className="w-full flex justify-center">
-                      <div className="flex items-center gap-2 text-green-400">
-                        <CheckCircle size={16} />
-                        <span className="text-sm">Fully repaid</span>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{loan.purpose}</p>
+                        
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Interest Rate</p>
+                            <p className="text-sm">{loan.interest_rate}%</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Application Date</p>
+                            <p className="text-sm">{formatDate(loan.created_at)}</p>
+                          </div>
+                          {loan.repayment_due_date && (
+                            <div>
+                              <p className="text-xs text-muted-foreground">Repayment Due</p>
+                              <p className="text-sm">{formatDate(loan.repayment_due_date)}</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {loan.status === 'approved' && (
+                          <div className="pt-2">
+                            <ButtonCustom variant="glass" size="sm" className="w-full">
+                              Repay Loan
+                            </ButtonCustom>
+                          </div>
+                        )}
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="mx-auto w-12 h-12 rounded-full bg-muted/20 flex items-center justify-center mb-3">
+                        <Landmark size={24} className="text-muted-foreground" />
+                      </div>
+                      <h3 className="text-lg font-medium">No Loans Yet</h3>
+                      <p className="text-muted-foreground mt-1 mb-4">
+                        You haven't applied for any loans. Apply now to get started.
+                      </p>
+                      {!showApplyForm && (
+                        <ButtonCustom variant="glass" onClick={() => setShowApplyForm(true)}>
+                          Apply for Loan
+                        </ButtonCustom>
+                      )}
                     </div>
                   )}
-                  
-                  {loan.status === 'rejected' && (
-                    <div className="w-full flex justify-center">
-                      <div className="flex items-center gap-2 text-red-400">
-                        <AlertCircle size={16} />
-                        <span className="text-sm">Application rejected</span>
-                      </div>
-                    </div>
-                  )}
-                </CardFooter>
-              </CardCustom>
-            ))}
+                </div>
+              </CardContent>
+            </CardCustom>
           </div>
-        ) : (
-          <CardCustom className="glass-card max-w-md mx-auto p-6 text-center">
-            <h3 className="text-xl font-semibold mb-4">No Loans Yet</h3>
-            <p className="text-muted-foreground mb-6">
-              Apply for a loan to get Movals for your needs. Loans are managed by MBMQ bank and have a simple application process.
-            </p>
-            <Button onClick={() => setIsApplyDialogOpen(true)}>
-              Apply for Your First Loan
-            </Button>
-          </CardCustom>
-        )}
+          
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Info Card */}
+            <CardCustom className={`glass-card ${getAnimationClass("fade", 2)}`}>
+              <CardHeader>
+                <CardTitle>Loan Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-green-500" />
+                    <p className="text-sm">Fast approval process</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-green-500" />
+                    <p className="text-sm">Low interest rates starting at 5%</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-green-500" />
+                    <p className="text-sm">Simple repayment options</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle size={18} className="text-green-500" />
+                    <p className="text-sm">No hidden fees</p>
+                  </div>
+                </div>
+                
+                <div className="pt-2 border-t border-white/10">
+                  <h4 className="font-medium mb-2">Loan Process</h4>
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium">
+                        1
+                      </div>
+                      <div>
+                        <p className="text-sm">Submit loan application</p>
+                        <p className="text-xs text-muted-foreground">Provide loan amount and purpose</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium">
+                        2
+                      </div>
+                      <div>
+                        <p className="text-sm">Application review</p>
+                        <p className="text-xs text-muted-foreground">MBQM Bank reviews your application</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium">
+                        3
+                      </div>
+                      <div>
+                        <p className="text-sm">Loan approval</p>
+                        <p className="text-xs text-muted-foreground">If approved, funds are transferred to your wallet</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs text-primary font-medium">
+                        4
+                      </div>
+                      <div>
+                        <p className="text-sm">Repayment</p>
+                        <p className="text-xs text-muted-foreground">Repay loan by the due date plus interest</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="pt-2 border-t border-white/10">
+                  <p className="text-xs text-muted-foreground">
+                    For detailed information about loan terms and conditions, please refer to the 
+                    <a href="/terms" className="text-primary ml-1 hover:underline">
+                      Terms & Conditions
+                    </a>.
+                  </p>
+                </div>
+              </CardContent>
+            </CardCustom>
+          </div>
+        </div>
       </div>
     </Layout>
   );

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, FileText, Settings, Vote, BookOpen, Scale, Landmark } from "lucide-react";
+import { Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, FileText, Vote, BookOpen, Scale, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ButtonCustom } from "@/components/ui/button-custom";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +18,7 @@ const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   
   const navItems = [
     { title: "Home", href: "/" },
@@ -43,6 +43,15 @@ const Header = () => {
   useEffect(() => {
     setIsOpen(false);
   }, [location.pathname]);
+
+  // Handle logout click
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
   
   return (
     <header
@@ -83,7 +92,7 @@ const Header = () => {
                   </Link>
                 </li>
               ))}
-              {user && (
+              {isAuthenticated && (
                 <>
                   <li>
                     <Link
@@ -118,13 +127,13 @@ const Header = () => {
           
           {/* Auth Buttons / User Menu */}
           <div className="hidden md:flex items-center space-x-3">
-            {user ? (
+            {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     className="flex items-center space-x-2 text-sm font-medium rounded-lg glass-effect px-3 py-2 hover:bg-white/10 transition-colors"
                   >
-                    <span>{user.name || 'User'}</span>
+                    <span>{user?.name || 'User'}</span>
                     <ChevronDown size={16} />
                   </button>
                 </DropdownMenuTrigger>
@@ -172,7 +181,7 @@ const Header = () => {
                   </DropdownMenuItem>
                   
                   {/* Admin Pages */}
-                  {user.role === 'banker' || user.role === 'justice' || user.role === 'association' && (
+                  {user?.role && (user.role === 'banker' || user.role === 'justice' || user.role === 'association') && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
@@ -213,7 +222,7 @@ const Header = () => {
                   </DropdownMenuItem>
                   
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-500 focus:text-red-500">
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-500 focus:text-red-500">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                   </DropdownMenuItem>
@@ -264,7 +273,7 @@ const Header = () => {
                 </Link>
               ))}
               
-              {user ? (
+              {isAuthenticated ? (
                 <>
                   <Link
                     to="/profile"
@@ -334,7 +343,7 @@ const Header = () => {
                   </Link>
                   <div className="pt-2 mt-2 border-t border-white/10">
                     <button
-                      onClick={logout}
+                      onClick={handleLogout}
                       className="w-full px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-900/20 transition-colors text-left"
                     >
                       Log Out

@@ -16,7 +16,7 @@
     --popover: 224 71% 4%;
     --popover-foreground: 213 31% 91%;
     
-    --primary: 210 100% 52%;
+    --primary: 247 85% 61%;
     --primary-foreground: 222 47% 11%;
     
     --secondary: 217 33% 17%;
@@ -33,13 +33,13 @@
     
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 224 76% 48%;
+    --ring: 247 75% 61%;
     
     --radius: 1rem;
 
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 240 5% 96%;
-    --sidebar-primary: 224 76% 48%;
+    --sidebar-primary: 247 75% 61%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4% 16%;
     --sidebar-accent-foreground: 240 5% 96%;
@@ -57,7 +57,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
     
-    --primary: 210 100% 52%;
+    --primary: 247 85% 61%;
     --primary-foreground: 210 40% 98%;
     
     --secondary: 210 40% 96%;
@@ -74,7 +74,7 @@
     
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 222 84% 50%;
+    --ring: 247 75% 61%;
   }
 }
 
@@ -121,7 +121,7 @@
   }
   
   .glass-effect {
-    @apply bg-black/30 backdrop-blur-md border border-white/10 dark:bg-white/10;
+    @apply bg-black/30 backdrop-blur-md border border-white/10 shadow-lg dark:bg-white/10;
   }
   
   .glass-menu {
