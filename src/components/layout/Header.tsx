@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, FileText, Settings } from "lucide-react";
+import { Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, FileText, Settings, Vote, BookOpen, Scale, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ButtonCustom } from "@/components/ui/button-custom";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +18,7 @@ const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-  const { user, signOut } = useAuth();
+  const { user, logout } = useAuth();
   
   const navItems = [
     { title: "Home", href: "/" },
@@ -49,7 +49,7 @@ const Header = () => {
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-smooth",
         scrolled 
-          ? "py-3 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md shadow-sm" 
+          ? "py-3 glass-effect shadow-sm" 
           : "py-5 bg-transparent"
       )}
     >
@@ -73,10 +73,10 @@ const Header = () => {
                   <Link
                     to={item.href}
                     className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors glass-nav-item",
                       location.pathname === item.href
-                        ? "text-primary"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        ? "text-primary bg-white/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
                     {item.title}
@@ -89,10 +89,10 @@ const Header = () => {
                     <Link
                       to="/send-money"
                       className={cn(
-                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors glass-nav-item",
                         location.pathname === "/send-money"
-                          ? "text-primary"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          ? "text-primary bg-white/10"
+                          : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                       )}
                     >
                       Send Money
@@ -102,10 +102,10 @@ const Header = () => {
                     <Link
                       to="/receive-money"
                       className={cn(
-                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors glass-nav-item",
                         location.pathname === "/receive-money"
-                          ? "text-primary"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          ? "text-primary bg-white/10"
+                          : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                       )}
                     >
                       Receive Money
@@ -122,13 +122,13 @@ const Header = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="flex items-center space-x-2 text-sm font-medium rounded-lg border px-3 py-2 hover:bg-accent transition-colors"
+                    className="flex items-center space-x-2 text-sm font-medium rounded-lg glass-effect px-3 py-2 hover:bg-white/10 transition-colors"
                   >
-                    <span>{user.firstName || 'User'}</span>
+                    <span>{user.name || 'User'}</span>
                     <ChevronDown size={16} />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-56 glass-menu">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -151,19 +151,52 @@ const Header = () => {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   
+                  {/* New Pages */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/voting" className="cursor-pointer w-full">
+                      <Vote className="mr-2 h-4 w-4" />
+                      <span>Voting</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/loans" className="cursor-pointer w-full">
+                      <Landmark className="mr-2 h-4 w-4" />
+                      <span>Loans</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/chainbook" className="cursor-pointer w-full">
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      <span>Chainbook</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  
                   {/* Admin Pages */}
-                  <DropdownMenuItem asChild>
-                    <Link to="/users" className="cursor-pointer w-full">
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>Users</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/association" className="cursor-pointer w-full">
-                      <Shield className="mr-2 h-4 w-4" />
-                      <span>Association</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  {user.role === 'banker' || user.role === 'justice' || user.role === 'association' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link to="/users" className="cursor-pointer w-full">
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>Users</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/association" className="cursor-pointer w-full">
+                          <Shield className="mr-2 h-4 w-4" />
+                          <span>Association</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      {user.role === 'justice' && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/justice" className="cursor-pointer w-full">
+                            <Scale className="mr-2 h-4 w-4" />
+                            <span>Justice</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
                   
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -180,7 +213,7 @@ const Header = () => {
                   </DropdownMenuItem>
                   
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={signOut} className="cursor-pointer text-red-500 focus:text-red-500">
+                  <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-500 focus:text-red-500">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                   </DropdownMenuItem>
@@ -189,7 +222,7 @@ const Header = () => {
             ) : (
               <>
                 <Link to="/login">
-                  <ButtonCustom variant="outline" size="sm">
+                  <ButtonCustom variant="glass" size="sm">
                     Sign In
                   </ButtonCustom>
                 </Link>
@@ -204,7 +237,7 @@ const Header = () => {
           
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="md:hidden rounded-lg p-2 glass-nav-item text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
@@ -214,7 +247,7 @@ const Header = () => {
         
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 p-4 md:hidden bg-white dark:bg-zinc-900 border-b shadow-sm animate-fade-in">
+          <div className="absolute top-full left-0 right-0 p-4 md:hidden glass-effect shadow-sm animate-fade-in">
             <nav className="flex flex-col space-y-2 pt-2 pb-4">
               {navItems.map((item) => (
                 <Link
@@ -223,8 +256,8 @@ const Header = () => {
                   className={cn(
                     "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                     location.pathname === item.href
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      ? "bg-white/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                   )}
                 >
                   {item.title}
@@ -238,8 +271,8 @@ const Header = () => {
                     className={cn(
                       "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                       location.pathname === "/profile"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
                     Profile
@@ -249,8 +282,8 @@ const Header = () => {
                     className={cn(
                       "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                       location.pathname === "/send-money"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
                     Send Money
@@ -260,25 +293,58 @@ const Header = () => {
                     className={cn(
                       "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                       location.pathname === "/receive-money"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
                     Receive Money
                   </Link>
-                  <div className="pt-2 mt-2 border-t border-border">
+                  <Link
+                    to="/voting"
+                    className={cn(
+                      "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                      location.pathname === "/voting"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                  >
+                    Voting
+                  </Link>
+                  <Link
+                    to="/loans"
+                    className={cn(
+                      "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                      location.pathname === "/loans"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                  >
+                    Loans
+                  </Link>
+                  <Link
+                    to="/chainbook"
+                    className={cn(
+                      "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                      location.pathname === "/chainbook"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                  >
+                    Chainbook
+                  </Link>
+                  <div className="pt-2 mt-2 border-t border-white/10">
                     <button
-                      onClick={signOut}
-                      className="w-full px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left"
+                      onClick={logout}
+                      className="w-full px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-900/20 transition-colors text-left"
                     >
                       Log Out
                     </button>
                   </div>
                 </>
               ) : (
-                <div className="flex flex-col space-y-2 pt-2 border-t">
+                <div className="flex flex-col space-y-2 pt-2 border-t border-white/10">
                   <Link to="/login" className="w-full">
-                    <ButtonCustom variant="outline" className="w-full">
+                    <ButtonCustom variant="glass" className="w-full">
                       Sign In
                     </ButtonCustom>
                   </Link>
