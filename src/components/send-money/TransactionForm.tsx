@@ -110,11 +110,11 @@ const TransactionForm = ({ selectedUser }: TransactionFormProps) => {
       // Reset form
       setAmount('');
       setDescription('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending money:', error);
       toast({
         title: 'Error',
-        description: 'Unable to send money. Please try again.',
+        description: error.message || 'Unable to send money. Please try again.',
         variant: 'destructive',
       });
     } finally {

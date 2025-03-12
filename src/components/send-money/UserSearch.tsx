@@ -18,23 +18,6 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Get user email from auth
-  const getUserEmail = async (userId: string) => {
-    try {
-      const { data, error } = await supabase.auth.admin.getUserById(userId);
-      
-      if (error) {
-        console.error('Error getting user by ID:', error);
-        return null;
-      }
-      
-      return data?.user?.email || null;
-    } catch (error) {
-      console.error('Error getting user email:', error);
-      return null;
-    }
-  };
-
   // Function to handle user search
   const handleUserSearch = async () => {
     if (!searchTerm.trim()) {
@@ -49,13 +32,14 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
     try {
       setIsSearching(true);
       
-      // Query to profiles table
+      // Query to profiles table with auth.users email if available
       const { data: userProfiles, error } = await supabase
         .from('profiles')
         .select(`
           id,
           first_name,
-          last_name
+          last_name,
+          auth_users:id(email)
         `)
         .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
         .order('first_name', { ascending: true })
@@ -63,17 +47,14 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
       
       if (error) throw error;
       
-      // For each profile, get the email from auth
-      const formattedUsers = await Promise.all(
-        (userProfiles || []).map(async (user) => {
-          const email = await getUserEmail(user.id);
-          return {
-            id: user.id,
-            name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
-            email: email
-          };
-        })
-      );
+      // Format the user data
+      const formattedUsers = (userProfiles || []).map((user) => {
+        return {
+          id: user.id,
+          name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
+          email: user.auth_users?.email || null
+        };
+      });
       
       setSearchResults(formattedUsers);
       

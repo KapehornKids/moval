@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, ChevronDown, User, LogOut, Home, Users, ShieldCheck, Building, Scale, Settings } from 'lucide-react';
@@ -12,11 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const Navbar = () => {
   const { isAuthenticated, user, logout, hasRole } = useAuth();
-  const { isMobile } = useMobile();
+  const { isMobile } = useIsMobile();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAssociationMember, setIsAssociationMember] = useState(false);
@@ -24,7 +23,6 @@ const Navbar = () => {
   const [isJusticeDepartment, setIsJusticeDepartment] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
-  // Check user roles
   useEffect(() => {
     const checkRoles = async () => {
       if (isAuthenticated && user) {
@@ -43,7 +41,6 @@ const Navbar = () => {
     checkRoles();
   }, [isAuthenticated, user, hasRole]);
 
-  // Handle scroll for navbar transparency
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 10) {
@@ -81,13 +78,11 @@ const Navbar = () => {
     )}>
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <Link to="/" className="flex items-center space-x-2" onClick={closeMenu}>
             <ShieldCheck className="h-6 w-6 text-primary" />
             <span className="font-bold text-xl">JusticeChain</span>
           </Link>
           
-          {/* Desktop Navigation */}
           {!isMobile && (
             <div className="hidden md:flex items-center space-x-6">
               {isAuthenticated ? (
@@ -152,7 +147,6 @@ const Navbar = () => {
                     Voting
                   </Link>
                   
-                  {/* Admin links based on roles */}
                   {(isAssociationMember || isBanker || isJusticeDepartment) && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -226,7 +220,6 @@ const Navbar = () => {
             </div>
           )}
           
-          {/* User menu (desktop) */}
           {!isMobile && isAuthenticated && (
             <div className="hidden md:flex items-center">
               <DropdownMenu>
@@ -258,7 +251,6 @@ const Navbar = () => {
             </div>
           )}
           
-          {/* Mobile menu button */}
           {isMobile && (
             <Button variant="ghost" size="sm" onClick={toggleMenu}>
               {isMenuOpen ? (
@@ -271,7 +263,6 @@ const Navbar = () => {
         </div>
       </div>
       
-      {/* Mobile menu */}
       {isMobile && isMenuOpen && (
         <div className={cn(
           "fixed inset-0 bg-background/95 z-50 pt-16 pb-6 px-4 backdrop-blur-sm overflow-y-auto transition-all duration-300",
@@ -341,7 +332,6 @@ const Navbar = () => {
                   <span>Voting</span>
                 </Link>
                 
-                {/* Admin links based on roles */}
                 {isAssociationMember && (
                   <>
                     <div className="pt-2 pb-1 border-t border-border/10 mt-2">

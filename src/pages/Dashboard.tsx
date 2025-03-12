@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/layout/Layout";
@@ -11,8 +10,8 @@ import { getAnimationClass } from "@/lib/animations";
 import { Activity, ArrowRight, CreditCard, FileText, Vote, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import MoneyRequests from '@/components/wallet/MoneyRequests';
 
-// Quick actions for dashboard
 const quickActions = [
   {
     title: "Apply for Loan",
@@ -50,7 +49,6 @@ const Dashboard = () => {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   
-  // Fetch transactions
   useEffect(() => {
     const fetchTransactions = async () => {
       if (!user) return;
@@ -86,7 +84,6 @@ const Dashboard = () => {
           
         if (outgoingError) throw outgoingError;
         
-        // Transform incoming transactions
         const incomingTransactions = incomingData.map((tx: any) => ({
           id: tx.id,
           type: 'incoming' as const,
@@ -98,7 +95,6 @@ const Dashboard = () => {
           status: tx.status as "completed" | "pending" | "failed"
         }));
         
-        // Transform outgoing transactions
         const outgoingTransactions = outgoingData.map((tx: any) => ({
           id: tx.id,
           type: 'outgoing' as const,
@@ -110,7 +106,6 @@ const Dashboard = () => {
           status: tx.status as "completed" | "pending" | "failed"
         }));
         
-        // Combine and sort by date
         const allTransactions = [...incomingTransactions, ...outgoingTransactions]
           .sort((a, b) => b.date.getTime() - a.date.getTime())
           .slice(0, 4);
@@ -126,12 +121,10 @@ const Dashboard = () => {
     fetchTransactions();
   }, [user]);
   
-  // Handle send money modal
   const handleSendMoney = () => {
     navigate('/send-money');
   };
   
-  // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
       toast({
@@ -144,7 +137,7 @@ const Dashboard = () => {
   }, [isAuthenticated, isLoading, navigate]);
   
   if (!isAuthenticated && !isLoading) {
-    return null; // Don't render anything if not authenticated
+    return null;
   }
   
   return (
@@ -158,9 +151,7 @@ const Dashboard = () => {
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Wallet Card */}
             <div className={getAnimationClass("fade", 1)}>
               <WalletCard 
                 onSend={handleSendMoney} 
@@ -168,7 +159,6 @@ const Dashboard = () => {
               />
             </div>
             
-            {/* Recent Transactions */}
             <CardCustom className={getAnimationClass("fade", 2)}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xl">Recent Transactions</CardTitle>
@@ -212,11 +202,20 @@ const Dashboard = () => {
                 </div>
               </CardContent>
             </CardCustom>
+            
+            <div className="col-span-12 md:col-span-6 xl:col-span-4">
+              <CardCustom className="glass-card">
+                <CardHeader>
+                  <CardTitle>Money Requests</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <MoneyRequests />
+                </CardContent>
+              </CardCustom>
+            </div>
           </div>
           
-          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Activity Card */}
             <CardCustom className={getAnimationClass("fade", 3)}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xl flex items-center gap-2">
@@ -271,7 +270,6 @@ const Dashboard = () => {
               </CardContent>
             </CardCustom>
             
-            {/* Quick Actions */}
             <CardCustom className={getAnimationClass("fade", 4)}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-xl">Quick Actions</CardTitle>
