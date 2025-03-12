@@ -6,19 +6,23 @@ export async function setupInitialAdminAndElections() {
     // Email for the admin user
     const adminEmail = "kumarapoorva120021@gmail.com";
     
-    // Find the user by email
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserByEmail(adminEmail);
+    // Find the user by email - this needs to be updated since admin API is not accessible via client
+    const { data: userQuery, error: userQueryError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', adminEmail)
+      .maybeSingle();
     
-    if (userError) {
-      console.error("User lookup error:", userError);
+    if (userQueryError) {
+      console.error("User lookup error:", userQueryError);
       return { success: false, message: "User not found. Please make sure the admin email is registered." };
     }
     
-    if (!userData?.user) {
+    if (!userQuery?.id) {
       return { success: false, message: "User not found. Please make sure the admin email is registered." };
     }
     
-    const userId = userData.user.id;
+    const userId = userQuery.id;
     
     // Assign roles to the admin
     const roles = ['association_member', 'banker', 'justice_department'];

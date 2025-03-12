@@ -1,10 +1,15 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, FileText, Vote, BookOpen, Scale, Landmark } from "lucide-react";
+import { 
+  Menu, X, ChevronDown, User, LogOut, Home, CreditCard, Users, Shield, 
+  FileText, Vote, BookOpen, Scale, Landmark, QrCode, BanknoteIcon,
+  PanelLeftIcon, Rocket, MoveRight, MoveLeft, History
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ButtonCustom } from "@/components/ui/button-custom";
 import { useAuth } from "@/hooks/useAuth";
+import { useMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,13 +17,48 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 
 const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, hasRole } = useAuth();
+  const isMobile = useMobile();
+  const [roles, setRoles] = useState<{
+    isAssociation: boolean;
+    isBanker: boolean;
+    isJustice: boolean;
+  }>({
+    isAssociation: false,
+    isBanker: false,
+    isJustice: false
+  });
+  
+  // Check user roles
+  useEffect(() => {
+    const checkRoles = async () => {
+      if (!user) return;
+      
+      const [isAssociation, isBanker, isJustice] = await Promise.all([
+        hasRole("association_member"),
+        hasRole("banker"),
+        hasRole("justice_department"),
+      ]);
+      
+      setRoles({
+        isAssociation,
+        isBanker,
+        isJustice
+      });
+    };
+    
+    checkRoles();
+  }, [user, hasRole]);
   
   const navItems = [
     { title: "Home", href: "/" },
@@ -104,6 +144,7 @@ const Header = () => {
                           : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                       )}
                     >
+                      <MoveRight className="w-4 h-4 mr-1 inline" />
                       Send Money
                     </Link>
                   </li>
@@ -117,7 +158,8 @@ const Header = () => {
                           : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                       )}
                     >
-                      Receive Money
+                      <MoveLeft className="w-4 h-4 mr-1 inline" />
+                      Receive
                     </Link>
                   </li>
                 </>
@@ -140,86 +182,123 @@ const Header = () => {
                 <DropdownMenuContent align="end" className="w-56 glass-menu">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer w-full">
-                      <Home className="mr-2 h-4 w-4" />
-                      <span>Dashboard</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/profile" className="cursor-pointer w-full">
-                      <User className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/send-money" className="cursor-pointer w-full">
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      <span>Send Money</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem asChild>
+                      <Link to="/dashboard" className="cursor-pointer w-full">
+                        <Home className="mr-2 h-4 w-4" />
+                        <span>Dashboard</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/profile" className="cursor-pointer w-full">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  
                   <DropdownMenuSeparator />
                   
-                  {/* New Pages */}
-                  <DropdownMenuItem asChild>
-                    <Link to="/voting" className="cursor-pointer w-full">
-                      <Vote className="mr-2 h-4 w-4" />
-                      <span>Voting</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/loans" className="cursor-pointer w-full">
-                      <Landmark className="mr-2 h-4 w-4" />
-                      <span>Loans</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/chainbook" className="cursor-pointer w-full">
-                      <BookOpen className="mr-2 h-4 w-4" />
-                      <span>Chainbook</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Financial</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link to="/send-money" className="cursor-pointer w-full">
+                        <MoveRight className="mr-2 h-4 w-4" />
+                        <span>Send Money</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/receive-money" className="cursor-pointer w-full">
+                        <MoveLeft className="mr-2 h-4 w-4" />
+                        <span>Receive Money</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/loans" className="cursor-pointer w-full">
+                        <Landmark className="mr-2 h-4 w-4" />
+                        <span>Loans</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  
+                  <DropdownMenuSeparator />
+                  
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Society</DropdownMenuLabel>
+                    <DropdownMenuItem asChild>
+                      <Link to="/voting" className="cursor-pointer w-full">
+                        <Vote className="mr-2 h-4 w-4" />
+                        <span>Voting</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/chainbook" className="cursor-pointer w-full">
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        <span>Chainbook</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                   
                   {/* Admin Pages */}
-                  {user?.role && (user.role === 'banker' || user.role === 'justice' || user.role === 'association') && (
+                  {(roles.isAssociation || roles.isBanker || roles.isJustice) && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link to="/users" className="cursor-pointer w-full">
-                          <Users className="mr-2 h-4 w-4" />
-                          <span>Users</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/association" className="cursor-pointer w-full">
-                          <Shield className="mr-2 h-4 w-4" />
-                          <span>Association</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      {user.role === 'justice' && (
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">Administration</DropdownMenuLabel>
+                        
                         <DropdownMenuItem asChild>
-                          <Link to="/justice" className="cursor-pointer w-full">
-                            <Scale className="mr-2 h-4 w-4" />
-                            <span>Justice</span>
+                          <Link to="/users" className="cursor-pointer w-full">
+                            <Users className="mr-2 h-4 w-4" />
+                            <span>Users</span>
                           </Link>
                         </DropdownMenuItem>
-                      )}
+                        
+                        {roles.isAssociation && (
+                          <DropdownMenuItem asChild>
+                            <Link to="/association" className="cursor-pointer w-full">
+                              <Shield className="mr-2 h-4 w-4" />
+                              <span>Association</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {roles.isBanker && (
+                          <DropdownMenuItem asChild>
+                            <Link to="/banker-admin" className="cursor-pointer w-full">
+                              <BanknoteIcon className="mr-2 h-4 w-4" />
+                              <span>Banking</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {roles.isJustice && (
+                          <DropdownMenuItem asChild>
+                            <Link to="/justice-admin" className="cursor-pointer w-full">
+                              <Scale className="mr-2 h-4 w-4" />
+                              <span>Justice</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuGroup>
                     </>
                   )}
                   
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/terms" className="cursor-pointer w-full">
-                      <FileText className="mr-2 h-4 w-4" />
-                      <span>Terms & Conditions</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/privacy" className="cursor-pointer w-full">
-                      <FileText className="mr-2 h-4 w-4" />
-                      <span>Privacy Policy</span>
-                    </Link>
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem asChild>
+                      <Link to="/terms" className="cursor-pointer w-full">
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Terms & Conditions</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/privacy" className="cursor-pointer w-full">
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>Privacy Policy</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                   
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-500 focus:text-red-500">
@@ -256,7 +335,7 @@ const Header = () => {
         
         {/* Mobile Menu */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 p-4 md:hidden glass-effect shadow-sm animate-fade-in">
+          <div className="absolute top-full left-0 right-0 p-4 md:hidden glass-effect shadow-sm animate-fade-in max-h-[80vh] overflow-y-auto">
             <nav className="flex flex-col space-y-2 pt-2 pb-4">
               {navItems.map((item) => (
                 <Link
@@ -284,8 +363,14 @@ const Header = () => {
                         : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
+                    <User className="w-4 h-4 mr-2 inline-block" />
                     Profile
                   </Link>
+                  
+                  <div className="py-2 border-t border-white/10 mb-1">
+                    <p className="px-4 py-1 text-xs text-muted-foreground">Financial</p>
+                  </div>
+                  
                   <Link
                     to="/send-money"
                     className={cn(
@@ -295,6 +380,7 @@ const Header = () => {
                         : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
+                    <MoveRight className="w-4 h-4 mr-2 inline-block" />
                     Send Money
                   </Link>
                   <Link
@@ -306,18 +392,8 @@ const Header = () => {
                         : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
+                    <MoveLeft className="w-4 h-4 mr-2 inline-block" />
                     Receive Money
-                  </Link>
-                  <Link
-                    to="/voting"
-                    className={cn(
-                      "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
-                      location.pathname === "/voting"
-                        ? "bg-white/10 text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                    )}
-                  >
-                    Voting
                   </Link>
                   <Link
                     to="/loans"
@@ -328,7 +404,25 @@ const Header = () => {
                         : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
+                    <Landmark className="w-4 h-4 mr-2 inline-block" />
                     Loans
+                  </Link>
+                  
+                  <div className="py-2 border-t border-white/10 mb-1">
+                    <p className="px-4 py-1 text-xs text-muted-foreground">Society</p>
+                  </div>
+                  
+                  <Link
+                    to="/voting"
+                    className={cn(
+                      "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                      location.pathname === "/voting"
+                        ? "bg-white/10 text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                  >
+                    <Vote className="w-4 h-4 mr-2 inline-block" />
+                    Voting
                   </Link>
                   <Link
                     to="/chainbook"
@@ -339,13 +433,83 @@ const Header = () => {
                         : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                     )}
                   >
+                    <BookOpen className="w-4 h-4 mr-2 inline-block" />
                     Chainbook
                   </Link>
+                  
+                  {/* Admin links for mobile */}
+                  {(roles.isAssociation || roles.isBanker || roles.isJustice) && (
+                    <>
+                      <div className="py-2 border-t border-white/10 mb-1">
+                        <p className="px-4 py-1 text-xs text-muted-foreground">Administration</p>
+                      </div>
+                      
+                      <Link
+                        to="/users"
+                        className={cn(
+                          "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                          location.pathname === "/users"
+                            ? "bg-white/10 text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                        )}
+                      >
+                        <Users className="w-4 h-4 mr-2 inline-block" />
+                        Users
+                      </Link>
+                      
+                      {roles.isAssociation && (
+                        <Link
+                          to="/association"
+                          className={cn(
+                            "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                            location.pathname === "/association"
+                              ? "bg-white/10 text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                          )}
+                        >
+                          <Shield className="w-4 h-4 mr-2 inline-block" />
+                          Association
+                        </Link>
+                      )}
+                      
+                      {roles.isBanker && (
+                        <Link
+                          to="/banker-admin"
+                          className={cn(
+                            "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                            location.pathname === "/banker-admin"
+                              ? "bg-white/10 text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                          )}
+                        >
+                          <BanknoteIcon className="w-4 h-4 mr-2 inline-block" />
+                          Banking
+                        </Link>
+                      )}
+                      
+                      {roles.isJustice && (
+                        <Link
+                          to="/justice-admin"
+                          className={cn(
+                            "px-4 py-3 rounded-lg text-sm font-medium transition-colors",
+                            location.pathname === "/justice-admin"
+                              ? "bg-white/10 text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                          )}
+                        >
+                          <Scale className="w-4 h-4 mr-2 inline-block" />
+                          Justice
+                        </Link>
+                      )}
+                    </>
+                  )}
+                  
                   <div className="pt-2 mt-2 border-t border-white/10">
                     <button
                       onClick={handleLogout}
                       className="w-full px-4 py-3 rounded-lg text-sm font-medium text-red-500 hover:bg-red-900/20 transition-colors text-left"
                     >
+                      <LogOut className="w-4 h-4 mr-2 inline-block" />
                       Log Out
                     </button>
                   </div>

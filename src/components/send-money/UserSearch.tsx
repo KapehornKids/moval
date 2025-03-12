@@ -1,12 +1,14 @@
 
 import { useState } from 'react';
-import { User, Search } from 'lucide-react';
+import { User, Search, QrCode } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ButtonCustom } from '@/components/ui/button-custom';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import QRCodeScanner from './QRCodeScanner';
 
 interface UserSearchProps {
   onUserSelect: (user: { id: string; name: string; email: string | null }) => void;
@@ -17,6 +19,75 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+
+  // Function to handle QR code scanning result
+  const handleQRCodeScanned = (userId: string) => {
+    if (!userId) {
+      toast({
+        title: 'Invalid QR Code',
+        description: 'The scanned QR code does not contain a valid user ID',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsQRModalOpen(false);
+    
+    // Look up the user based on the scanned ID
+    fetchUserById(userId);
+  };
+
+  // Function to fetch user by ID (from QR scan)
+  const fetchUserById = async (userId: string) => {
+    try {
+      setIsSearching(true);
+      
+      // Get user profile
+      const { data: userProfile, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          auth_users:id(email)
+        `)
+        .eq('id', userId)
+        .single();
+      
+      if (error) throw error;
+      
+      if (userProfile) {
+        const user = {
+          id: userProfile.id,
+          name: `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'User',
+          email: userProfile.auth_users?.email || null
+        };
+        
+        onUserSelect(user);
+        
+        toast({
+          title: 'User Found',
+          description: `Selected user: ${user.name}`,
+        });
+      } else {
+        toast({
+          title: 'User Not Found',
+          description: 'No user found with the scanned ID',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to get user information',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   // Function to handle user search
   const handleUserSearch = async () => {
@@ -79,28 +150,47 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
   return (
     <div className="grid gap-4">
       <Label htmlFor="search">Search User</Label>
-      <div className="relative">
-        <Input
-          id="search"
-          placeholder="Enter a name to search..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleUserSearch();
-            }
-          }}
-          className="glass-effect"
-        />
-        <ButtonCustom
-          variant="glass"
-          size="sm"
-          className="absolute right-1 top-1 rounded-md"
-          onClick={handleUserSearch}
-          disabled={isSearching}
-        >
-          {isSearching ? 'Searching...' : <Search className="w-4 h-4 mr-2" />}
-        </ButtonCustom>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Input
+            id="search"
+            placeholder="Enter a name to search..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleUserSearch();
+              }
+            }}
+            className="glass-effect pr-10"
+          />
+          <ButtonCustom
+            variant="glass"
+            size="sm"
+            className="absolute right-1 top-1 rounded-md"
+            onClick={handleUserSearch}
+            disabled={isSearching}
+          >
+            {isSearching ? 'Searching...' : <Search className="w-4 h-4" />}
+          </ButtonCustom>
+        </div>
+        
+        <Dialog open={isQRModalOpen} onOpenChange={setIsQRModalOpen}>
+          <DialogTrigger asChild>
+            <ButtonCustom variant="outline" className="px-3">
+              <QrCode className="w-4 h-4 mr-2" />
+              Scan QR
+            </ButtonCustom>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Scan User QR Code</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center py-4">
+              <QRCodeScanner onScan={handleQRCodeScanned} />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       
       {searchResults.length > 0 && (
