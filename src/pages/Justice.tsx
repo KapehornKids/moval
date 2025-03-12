@@ -5,6 +5,7 @@ import { CardCustom, CardContent, CardHeader, CardTitle } from '@/components/ui/
 import { ButtonCustom } from '@/components/ui/button-custom';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { getAnimationClass } from '@/lib/animations';
@@ -92,7 +93,9 @@ const Justice = () => {
           return {
             ...dispute,
             complainant_name: complainantName,
-            respondent_name: respondentName
+            respondent_name: respondentName,
+            // Ensure status is a valid DisputeStatus
+            status: dispute.status as DisputeStatus
           };
         })
       );
@@ -113,7 +116,7 @@ const Justice = () => {
         );
       }
       
-      setDisputes(filteredDisputes);
+      setDisputes(filteredDisputes as Dispute[]);
     } catch (error) {
       console.error('Error fetching disputes:', error);
       toast({
@@ -447,7 +450,7 @@ const Justice = () => {
                       <ButtonCustom variant="outline" onClick={() => setSelectedDispute(null)}>
                         Cancel
                       </ButtonCustom>
-                      <ButtonCustom variant="destructive" onClick={handleDismiss}>
+                      <ButtonCustom variant="ghost" className="bg-red-500/10 hover:bg-red-500/20 text-red-500" onClick={handleDismiss}>
                         Dismiss Dispute
                       </ButtonCustom>
                       <ButtonCustom onClick={handleResolve}>
