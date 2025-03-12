@@ -3,6 +3,8 @@
 CREATE OR REPLACE FUNCTION public.update_wallet_balance(user_id_param UUID, amount_param NUMERIC)
 RETURNS void
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   -- Update the user's wallet balance

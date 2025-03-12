@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from "@/components/theme-provider"
@@ -9,6 +10,8 @@ import Dashboard from '@/pages/Dashboard';
 import Profile from '@/pages/Profile';
 import Association from '@/pages/Association';
 import Justice from '@/pages/Justice';
+import JusticeAdmin from '@/pages/JusticeAdmin';
+import BankerAdmin from '@/pages/BankerAdmin';
 import Users from '@/pages/Users';
 import SendMoney from '@/pages/SendMoney';
 import ReceiveMoney from '@/pages/ReceiveMoney';
@@ -32,17 +35,27 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/association" element={<Association />} />
-            <Route path="/justice" element={<Justice />} />
-            <Route path="/users" element={<Users />} />
+            
+            {/* Regular user routes */}
             <Route path="/send-money" element={<SendMoney />} />
             <Route path="/receive-money" element={<ReceiveMoney />} />
             <Route path="/chainbook" element={<Chainbook />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
             <Route path="/loans" element={<Loans />} />
             <Route path="/voting" element={<Voting />} />
+            
+            {/* Admin routes */}
+            <Route path="/association" element={<Association />} />
+            <Route path="/justice" element={<Justice />} />
+            <Route path="/justice-admin" element={<JusticeAdmin />} />
+            <Route path="/banker-admin" element={<BankerAdmin />} />
+            <Route path="/users" element={<Users />} />
             <Route path="/admin-setup" element={<AdminSetup />} />
+            
+            {/* Static pages */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            
+            {/* 404 route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
           <Toaster />

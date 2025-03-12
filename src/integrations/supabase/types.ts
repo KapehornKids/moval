@@ -404,6 +404,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      update_wallet_balance: {
+        Args: {
+          _user_id: string
+          _amount: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "user" | "association_member" | "banker" | "justice_department"
