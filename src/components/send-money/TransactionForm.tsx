@@ -7,12 +7,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { ButtonCustom } from '@/components/ui/button-custom';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface TransactionFormProps {
   selectedUser: { id: string; name: string } | null;
 }
 
 const TransactionForm = ({ selectedUser }: TransactionFormProps) => {
+  const { user, updateUserData } = useAuth();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -46,17 +48,19 @@ const TransactionForm = ({ selectedUser }: TransactionFormProps) => {
       return;
     }
 
+    if (!user) {
+      toast({
+        title: 'Error',
+        description: 'You must be logged in to send money.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSending(true);
 
     try {
       const amountNumber = parseFloat(amount);
-
-      // Get sender ID
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('You must be logged in to send money');
-      }
       
       const senderId = user.id;
       const receiverId = selectedUser.id;
@@ -78,6 +82,25 @@ const TransactionForm = ({ selectedUser }: TransactionFormProps) => {
         .single();
 
       if (transactionError) throw transactionError;
+
+      // Update sender's wallet (deduct amount)
+      const { error: senderWalletError } = await supabase.rpc('update_wallet_balance', {
+        user_id_param: senderId,
+        amount_param: -amountNumber
+      });
+      
+      if (senderWalletError) throw senderWalletError;
+
+      // Update receiver's wallet (add amount)
+      const { error: receiverWalletError } = await supabase.rpc('update_wallet_balance', {
+        user_id_param: receiverId,
+        amount_param: amountNumber
+      });
+      
+      if (receiverWalletError) throw receiverWalletError;
+
+      // Update user data to reflect new balance
+      await updateUserData();
 
       toast({
         title: 'Success',

@@ -7,20 +7,18 @@ export async function setupInitialAdminAndElections() {
     const adminEmail = "kumarapoorva120021@gmail.com";
     
     // Find the user by email
-    const { data: userData, error: userError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', adminEmail)
-      .single();
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserByEmail(adminEmail);
     
     if (userError) {
-      if (userError.code === 'PGRST116') {
-        return { success: false, message: "User not found. Please make sure the admin email is registered." };
-      }
-      throw userError;
+      console.error("User lookup error:", userError);
+      return { success: false, message: "User not found. Please make sure the admin email is registered." };
     }
     
-    const userId = userData.id;
+    if (!userData?.user) {
+      return { success: false, message: "User not found. Please make sure the admin email is registered." };
+    }
+    
+    const userId = userData.user.id;
     
     // Assign roles to the admin
     const roles = ['association_member', 'banker', 'justice_department'];
@@ -29,7 +27,7 @@ export async function setupInitialAdminAndElections() {
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert([
-          { user_id: userId, role_name: role }
+          { user_id: userId, role: role }
         ]);
       
       if (roleError) throw roleError;
@@ -46,7 +44,7 @@ export async function setupInitialAdminAndElections() {
         {
           title: 'Association Members Election',
           description: 'Election for new Association Members',
-          role_type: 'association_member',
+          position_type: 'association_member',
           start_date: new Date().toISOString(),
           end_date: twoWeeksFromNow.toISOString(),
           status: 'active'
@@ -62,7 +60,7 @@ export async function setupInitialAdminAndElections() {
         {
           title: 'Justice Department Election',
           description: 'Election for Justice Department Representatives',
-          role_type: 'justice_department',
+          position_type: 'justice_department',
           start_date: new Date().toISOString(),
           end_date: twoWeeksFromNow.toISOString(),
           status: 'active'

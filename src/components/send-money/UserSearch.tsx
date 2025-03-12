@@ -18,19 +18,19 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Get user email by ID
-  const getUserEmailById = async (userId: string) => {
+  // Get user email from auth
+  const getUserEmail = async (userId: string) => {
     try {
-      const { data: authUser } = await supabase.auth.getUser();
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('id', userId)
-        .single();
-        
-      return profile?.email || authUser?.user?.email || null;
+      const { data, error } = await supabase.auth.admin.getUserById(userId);
+      
+      if (error) {
+        console.error('Error getting user by ID:', error);
+        return null;
+      }
+      
+      return data?.user?.email || null;
     } catch (error) {
-      console.error('Error getting user email by ID:', error);
+      console.error('Error getting user email:', error);
       return null;
     }
   };
@@ -55,22 +55,22 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
         .select(`
           id,
           first_name,
-          last_name,
-          email
+          last_name
         `)
-        .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
+        .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
         .order('first_name', { ascending: true })
         .limit(5);
       
       if (error) throw error;
       
+      // For each profile, get the email from auth
       const formattedUsers = await Promise.all(
         (userProfiles || []).map(async (user) => {
-          const email = user.email || await getUserEmailById(user.id);
+          const email = await getUserEmail(user.id);
           return {
             id: user.id,
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
-            email: email || 'No email'
+            email: email
           };
         })
       );
@@ -101,7 +101,7 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
       <div className="relative">
         <Input
           id="search"
-          placeholder="Enter a name or email to search..."
+          placeholder="Enter a name to search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           onKeyDown={(e) => {
@@ -137,7 +137,7 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
                 <SelectItem key={user.id} value={user.id}>
                   <div className="flex items-center space-x-2">
                     <User className="w-4 h-4" />
-                    <span>{user.name} ({user.email})</span>
+                    <span>{user.name} {user.email ? `(${user.email})` : ''}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -152,6 +152,7 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
           <div className="flex items-center space-x-2">
             <User className="w-4 h-4" />
             <span>{selectedUser.name}</span>
+            {selectedUser.email && <span className="text-muted-foreground text-sm">({selectedUser.email})</span>}
           </div>
         </div>
       )}

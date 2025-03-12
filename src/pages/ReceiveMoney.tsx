@@ -18,7 +18,7 @@ const ReceiveMoney = () => {
   const navigate = useNavigate();
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const [userInfo, setUserInfo] = useState<{
-    email: string;
+    email: string | null;
     walletAddress: string;
     name: string;
   }>({
@@ -40,29 +40,50 @@ const ReceiveMoney = () => {
     }
     
     const fetchUserInfo = async () => {
-      // Get email from user object
-      const email = user.email;
-      
-      // Get name from user object
-      const name = user.name;
-      
-      // Get wallet info
-      const { data: walletData, error: walletError } = await supabase
-        .from('wallets')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (walletError) {
-        console.error('Error fetching wallet:', walletError);
-        return;
+      try {
+        // Get wallet info
+        const { data: walletData, error: walletError } = await supabase
+          .from('wallets')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (walletError) {
+          console.error('Error fetching wallet:', walletError);
+          throw walletError;
+        }
+        
+        // Get profile data
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', user.id)
+          .single();
+        
+        if (profileError) {
+          console.error('Error fetching profile:', profileError);
+          throw profileError;
+        }
+        
+        // Get email from auth
+        const authData = await supabase.auth.getUser();
+        const email = authData.data?.user?.email;
+        
+        const fullName = `${profileData?.first_name || ''} ${profileData?.last_name || ''}`.trim();
+        
+        setUserInfo({
+          email,
+          walletAddress: walletData.id || user.id,
+          name: fullName || user.name || 'User'
+        });
+      } catch (error) {
+        console.error('Error setting up receive money page:', error);
+        toast({
+          title: 'Error',
+          description: 'Unable to load your information. Please try again.',
+          variant: 'destructive',
+        });
       }
-      
-      setUserInfo({
-        email,
-        walletAddress: walletData?.id || user.id,
-        name
-      });
     };
     
     fetchUserInfo();
@@ -200,7 +221,7 @@ const ReceiveMoney = () => {
                         variant="ghost"
                         size="sm"
                         className="p-0 w-8 h-8"
-                        onClick={() => handleCopy(userInfo.email, 'Email')}
+                        onClick={() => userInfo.email && handleCopy(userInfo.email, 'Email')}
                       >
                         <Copy size={16} />
                       </Button>
