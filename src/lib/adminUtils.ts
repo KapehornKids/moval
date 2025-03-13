@@ -32,7 +32,7 @@ export async function setupInitialAdminAndElections() {
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert([
-          { user_id: userId, role }
+          { user_id: userId, role: role }
         ]);
       
       if (roleError) throw roleError;

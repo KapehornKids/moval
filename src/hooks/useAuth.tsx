@@ -2,12 +2,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { AppRole } from "@/types";
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: "user" | "banker" | "justice" | "association";
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  roles: AppRole[];
   walletBalance: number;
 }
 
@@ -15,7 +19,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  hasRole: (role: "user" | "association_member" | "banker" | "justice_department") => Promise<boolean>;
+  hasRole: (role: AppRole) => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -29,7 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   // Check if a user has a specific role
-  const hasRole = async (role: "user" | "association_member" | "banker" | "justice_department"): Promise<boolean> => {
+  const hasRole = async (role: AppRole): Promise<boolean> => {
     try {
       if (!user) return false;
       
@@ -71,24 +75,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Fetch user role
-  const fetchUserRole = async (userId: string): Promise<string> => {
+  // Fetch user roles
+  const fetchUserRoles = async (userId: string): Promise<AppRole[]> => {
     try {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .single();
+        .eq('user_id', userId);
 
       if (error) {
-        console.error("Error fetching user role:", error);
-        return 'user';
+        console.error("Error fetching user roles:", error);
+        return ['user'];
       }
 
-      return data?.role || 'user';
+      return data.map(item => item.role as AppRole) || ['user'];
     } catch (error) {
-      console.error("Error fetching user role:", error);
-      return 'user';
+      console.error("Error fetching user roles:", error);
+      return ['user'];
     }
   };
 
@@ -127,9 +130,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const [walletBalance, userRole, profile] = await Promise.all([
+      const [walletBalance, userRoles, profile] = await Promise.all([
         fetchWalletBalance(currentUser.id),
-        fetchUserRole(currentUser.id),
+        fetchUserRoles(currentUser.id),
         fetchUserProfile(currentUser.id)
       ]);
 
@@ -141,7 +144,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: currentUser.id,
         name: userName,
         email: currentUser.email || '',
-        role: userRole as "user" | "banker" | "justice" | "association",
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        roles: userRoles,
+        role: userRoles[0], // For backwards compatibility
         walletBalance
       });
     } catch (error) {
@@ -162,6 +168,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Listen for auth changes
       const { data: authListener } = supabase.auth.onAuthStateChange(
         async (event, session) => {
+          console.log("Auth state changed:", event, session);
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
             await updateUserData();
           } else if (event === 'SIGNED_OUT') {

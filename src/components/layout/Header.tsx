@@ -49,7 +49,11 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
   // Get user's initials for avatar
   const getUserInitials = () => {
     if (!user) return "U";
-    return `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase();
+    // Use firstName/lastName if available, otherwise fallback to name or first character of email
+    const first = user.firstName || (user.name ? user.name.split(' ')[0] : '');
+    const last = user.lastName || (user.name ? user.name.split(' ')[1] || '' : '');
+    
+    return `${first.charAt(0) || ''}${last.charAt(0) || ''}`.toUpperCase() || user.email.charAt(0).toUpperCase();
   };
 
   return (
@@ -82,7 +86,7 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden md:inline text-sm font-medium">
-                    {user?.firstName || 'Account'}
+                    {user?.firstName || user?.name || 'Account'}
                   </span>
                 </button>
               </DropdownMenuTrigger>

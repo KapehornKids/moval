@@ -16,6 +16,8 @@ export interface User {
   lastName: string;
   walletBalance: number;
   roles: AppRole[];
+  name?: string;
+  role?: string;
 }
 
 export interface UserRole {

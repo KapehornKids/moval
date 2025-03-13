@@ -22,6 +22,7 @@ const Login = () => {
   useEffect(() => {
     // Redirect if already authenticated
     if (isAuthenticated) {
+      console.log("User authenticated, redirecting to dashboard");
       navigate("/dashboard");
     }
   }, [isAuthenticated, navigate]);
@@ -42,6 +43,7 @@ const Login = () => {
     
     try {
       await login(email, password);
+      console.log("Login successful, redirecting to dashboard");
       navigate("/dashboard");
     } catch (error) {
       // Error is already handled in the login function
