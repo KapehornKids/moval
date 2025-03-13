@@ -13,7 +13,7 @@ export const getHeaderItems = (): NavItem[] => {
       href: '/dashboard',
     },
     {
-      title: 'Money',
+      title: 'Finances',
       children: [
         {
           title: 'Send Money',
@@ -26,12 +26,20 @@ export const getHeaderItems = (): NavItem[] => {
         {
           title: 'Loans',
           href: '/loans',
+        },
+        {
+          title: 'Transactions',
+          href: '/transactions',
         }
       ]
     },
     {
-      title: 'Society',
+      title: 'Community',
       children: [
+        {
+          title: 'Profile',
+          href: '/profile',
+        },
         {
           title: 'Chainbook',
           href: '/chainbook',
@@ -71,6 +79,27 @@ export const getHeaderItems = (): NavItem[] => {
           href: '/users',
           roles: ['association_member']
         },
+        {
+          title: 'Admin Setup',
+          href: '/admin-setup',
+          roles: ['association_member']
+        }
+      ]
+    },
+    {
+      title: 'Info',
+      public: true,
+      children: [
+        {
+          title: 'Terms',
+          href: '/terms',
+          public: true
+        },
+        {
+          title: 'Privacy',
+          href: '/privacy',
+          public: true
+        }
       ]
     }
   ];

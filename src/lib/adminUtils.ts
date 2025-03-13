@@ -1,5 +1,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
+import { AppRole } from '@/types';
 
 export async function setupInitialAdminAndElections() {
   try {
@@ -25,7 +26,7 @@ export async function setupInitialAdminAndElections() {
     const userId = userQuery.id;
     
     // Assign roles to the admin
-    const roles = ['association_member', 'banker', 'justice_department'] as const;
+    const roles: AppRole[] = ['association_member', 'banker', 'justice_department'];
     
     for (const role of roles) {
       const { error: roleError } = await supabase
@@ -39,7 +40,7 @@ export async function setupInitialAdminAndElections() {
     
     // Create elections
     const twoWeeksFromNow = new Date();
-    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 2);
+    twoWeeksFromNow.setDate(twoWeeksFromNow.getDate() + 14);
     
     // Create Association Election
     const { error: associationElectionError } = await supabase
