@@ -21,6 +21,7 @@ interface Dispute {
   created_at: string;
   complainant_name: string;
   respondent_name: string | null;
+  ruling?: string; // Make ruling optional
 }
 
 const JusticeAdmin = () => {

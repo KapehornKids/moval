@@ -32,7 +32,7 @@ const Navbar = ({ items }: NavbarProps) => {
   }, [location.pathname]);
 
   // Function to check if a menu item should be shown based on user roles
-  const shouldShowMenuItem = (item: NavItem) => {
+  const shouldShowMenuItem = (item: NavItem): boolean => {
     // Public items should always be shown
     if (item.public) {
       return true;
@@ -52,6 +52,12 @@ const Navbar = ({ items }: NavbarProps) => {
     return true;
   };
 
+  // Check if a child item should be shown
+  const hasVisibleChildren = (item: NavItem): boolean => {
+    if (!item.children) return false;
+    return item.children.some(child => shouldShowMenuItem(child));
+  };
+
   // Function to check if a path is active
   const isActiveLink = (href?: string) => {
     if (!href) return false;
@@ -62,10 +68,15 @@ const Navbar = ({ items }: NavbarProps) => {
   const DesktopNav = () => (
     <NavigationMenu className="hidden lg:flex">
       <NavigationMenuList>
-        {items.map((item, index) => (
-          shouldShowMenuItem(item) && (
+        {items.map((item, index) => {
+          // Only show items that should be visible
+          if (!shouldShowMenuItem(item) && !hasVisibleChildren(item)) {
+            return null;
+          }
+
+          return (
             <NavigationMenuItem key={index}>
-              {item.children ? (
+              {item.children && hasVisibleChildren(item) ? (
                 <>
                   <NavigationMenuTrigger 
                     className={cn(
@@ -100,8 +111,8 @@ const Navbar = ({ items }: NavbarProps) => {
                     </ul>
                   </NavigationMenuContent>
                 </>
-              ) : (
-                <Link to={item.href || '#'}>
+              ) : item.href ? (
+                <Link to={item.href}>
                   <NavigationMenuLink
                     className={cn(
                       navigationMenuTriggerStyle(),
@@ -112,10 +123,10 @@ const Navbar = ({ items }: NavbarProps) => {
                     {item.title}
                   </NavigationMenuLink>
                 </Link>
-              )}
+              ) : null}
             </NavigationMenuItem>
-          )
-        ))}
+          );
+        })}
       </NavigationMenuList>
     </NavigationMenu>
   );
@@ -157,10 +168,15 @@ const Navbar = ({ items }: NavbarProps) => {
         </button>
 
         <div className="flex flex-col space-y-1">
-          {items.map((item, index) => (
-            shouldShowMenuItem(item) && (
+          {items.map((item, index) => {
+            // Skip items that should not be shown and have no visible children
+            if (!shouldShowMenuItem(item) && !hasVisibleChildren(item)) {
+              return null;
+            }
+
+            return (
               <div key={index} className="relative w-full">
-                {item.children ? (
+                {item.children && hasVisibleChildren(item) ? (
                   <div className="w-full rounded-md">
                     <div 
                       className={cn(
@@ -173,7 +189,7 @@ const Navbar = ({ items }: NavbarProps) => {
                     </div>
                     
                     <div className="pl-4 mt-1 space-y-1">
-                      {item.children?.map((child, childIndex) => (
+                      {item.children.map((child, childIndex) => (
                         shouldShowMenuItem(child) && (
                           <Link
                             key={childIndex}
@@ -182,6 +198,7 @@ const Navbar = ({ items }: NavbarProps) => {
                               "flex items-center px-4 py-2 text-sm rounded-md",
                               isActiveLink(child.href) ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50 hover:text-accent-foreground"
                             )}
+                            onClick={() => setIsOpen(false)}
                           >
                             {child.title}
                             <ChevronRight className="ml-auto h-4 w-4" />
@@ -190,20 +207,21 @@ const Navbar = ({ items }: NavbarProps) => {
                       ))}
                     </div>
                   </div>
-                ) : (
+                ) : item.href ? (
                   <Link
-                    to={item.href || '#'}
+                    to={item.href}
                     className={cn(
                       "flex items-center justify-between w-full px-3 py-2 text-sm font-medium rounded-md",
                       isActiveLink(item.href) ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50 hover:text-accent-foreground"
                     )}
+                    onClick={() => setIsOpen(false)}
                   >
                     {item.title}
                   </Link>
-                )}
+                ) : null}
               </div>
-            )
-          ))}
+            );
+          })}
         </div>
       </nav>
     </>

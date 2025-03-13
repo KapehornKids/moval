@@ -26,9 +26,9 @@ export async function setupInitialAdminAndElections() {
     const userId = userQuery.id;
     
     // Assign roles to the admin
-    const roles: AppRole[] = ['association_member', 'banker', 'justice_department'];
+    const rolesList: AppRole[] = ['association_member', 'banker', 'justice_department'];
     
-    for (const role of roles) {
+    for (const role of rolesList) {
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert([

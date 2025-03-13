@@ -13,20 +13,34 @@ import { Shield, Users, Gavel } from 'lucide-react';
 const AdminSetup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, hasRole } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Redirect if not authenticated
-    if (!isAuthenticated) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to access admin setup",
-        variant: "destructive",
-      });
-      navigate("/login");
-    }
-  }, [isAuthenticated, navigate]);
+    const checkAccess = async () => {
+      if (!isAuthenticated) {
+        toast({
+          title: "Authentication Required",
+          description: "Please login to access admin setup",
+          variant: "destructive",
+        });
+        navigate("/login");
+        return;
+      }
+
+      const hasAdminRole = await hasRole("association_member");
+      if (!hasAdminRole) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to access the Admin Setup page",
+          variant: "destructive",
+        });
+        navigate("/dashboard");
+      }
+    };
+
+    checkAccess();
+  }, [isAuthenticated, navigate, hasRole]);
 
   const handleSetup = async () => {
     setIsLoading(true);
@@ -57,10 +71,6 @@ const AdminSetup = () => {
       setIsLoading(false);
     }
   };
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <Layout>
@@ -97,7 +107,7 @@ const AdminSetup = () => {
                 <div>
                   <h3 className="text-lg font-medium">Association Election</h3>
                   <p className="text-muted-foreground">
-                    Create a new 2-day election for Association Member positions
+                    Create a new election for Association Member positions
                   </p>
                 </div>
               </div>
@@ -109,7 +119,7 @@ const AdminSetup = () => {
                 <div>
                   <h3 className="text-lg font-medium">Justice Department Election</h3>
                   <p className="text-muted-foreground">
-                    Create a new 2-day election for Justice Department positions
+                    Create a new election for Justice Department positions
                   </p>
                 </div>
               </div>

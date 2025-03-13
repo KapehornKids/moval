@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { LogOut, User, Settings, Wallet } from 'lucide-react';
+import { LogOut, User, Settings, Wallet, Shield } from 'lucide-react';
 
 interface HeaderProps {
   transparentBg?: boolean;
@@ -54,6 +54,13 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
     const last = user.lastName || (user.name ? user.name.split(' ')[1] || '' : '');
     
     return `${first.charAt(0) || ''}${last.charAt(0) || ''}`.toUpperCase() || user.email.charAt(0).toUpperCase();
+  };
+
+  // Check if user has admin roles
+  const hasAdminRole = () => {
+    if (!user) return false;
+    const adminRoles: string[] = ['banker', 'association_member', 'justice_department'];
+    return user.roles.some(role => adminRoles.includes(role));
   };
 
   return (
@@ -105,6 +112,33 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
                     <span>Dashboard</span>
                   </Link>
                 </DropdownMenuItem>
+                
+                {hasAdminRole() && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Administration</DropdownMenuLabel>
+                    
+                    {user?.roles.includes('association_member') && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin-setup" className="cursor-pointer flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          <span>Admin Setup</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    
+                    {user?.roles.includes('justice_department') && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/justice-admin" className="cursor-pointer flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          <span>Justice Admin</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+                
+                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link to="/settings" className="cursor-pointer flex items-center gap-2">
                     <Settings className="h-4 w-4" />

@@ -52,7 +52,6 @@ export const getHeaderItems = (): NavItem[] => {
     },
     {
       title: 'Admin',
-      roles: ['banker', 'association_member', 'justice_department'],
       children: [
         {
           title: 'Association',

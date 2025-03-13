@@ -43,5 +43,5 @@ export interface Dispute {
   transaction_id: string;
   description: string;
   resolution?: string;
-  ruling?: 'upheld' | 'rejected' | null;
+  ruling?: string;
 }
