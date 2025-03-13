@@ -34,18 +34,18 @@ const SendMoney = () => {
 
   return (
     <Layout>
-      <div className="container px-4 md:px-6 py-8 md:py-12">
+      <div className="container max-w-4xl px-4 md:px-6 py-8 md:py-12">
         <div className="flex flex-col gap-2 mb-8">
-          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Send Money</h1>
+          <h1 className="text-3xl font-bold tracking-tight animate-fade-in">Moval Transfers</h1>
           <p className="text-muted-foreground animate-fade-in">
-            Send money to other users in the Moval Society
+            Send or request money from other Moval citizens
           </p>
         </div>
 
         <Tabs defaultValue="send" className={`w-full ${getAnimationClass("fade", 1)}`}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="send">Send Money</TabsTrigger>
-            <TabsTrigger value="request">Request Money</TabsTrigger>
+          <TabsList className="w-full mb-6">
+            <TabsTrigger value="send" className="flex-1">Send Money</TabsTrigger>
+            <TabsTrigger value="request" className="flex-1">Request Money</TabsTrigger>
           </TabsList>
           
           <TabsContent value="send">

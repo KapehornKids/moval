@@ -6,7 +6,7 @@ export async function setupInitialAdminAndElections() {
     // Email for the admin user
     const adminEmail = "kumarapoorva120021@gmail.com";
     
-    // Find the user by email - this needs to be updated since admin API is not accessible via client
+    // Find the user by email
     const { data: userQuery, error: userQueryError } = await supabase
       .from('profiles')
       .select('id')
@@ -25,13 +25,13 @@ export async function setupInitialAdminAndElections() {
     const userId = userQuery.id;
     
     // Assign roles to the admin
-    const roles = ['association_member', 'banker', 'justice_department'];
+    const roles = ['association_member', 'banker', 'justice_department'] as const;
     
     for (const role of roles) {
       const { error: roleError } = await supabase
         .from('user_roles')
         .upsert([
-          { user_id: userId, role: role }
+          { user_id: userId, role }
         ]);
       
       if (roleError) throw roleError;

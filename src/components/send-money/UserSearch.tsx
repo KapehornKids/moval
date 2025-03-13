@@ -17,7 +17,7 @@ interface UserSearchProps {
 
 const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; name: string; email: string | null }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
@@ -46,22 +46,26 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
       // Get user profile
       const { data: userProfile, error } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          auth_users:id(email)
-        `)
+        .select('id, first_name, last_name')
         .eq('id', userId)
         .single();
       
       if (error) throw error;
       
       if (userProfile) {
+        // Get user email separately
+        const { data: userData } = await supabase
+          .from('auth_users')
+          .select('email')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        const email = userData?.email || null;
+        
         const user = {
           id: userProfile.id,
           name: `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'User',
-          email: userProfile.auth_users?.email || null
+          email
         };
         
         onUserSelect(user);
@@ -103,27 +107,22 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
     try {
       setIsSearching(true);
       
-      // Query to profiles table with auth.users email if available
+      // Query to profiles table
       const { data: userProfiles, error } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          auth_users:id(email)
-        `)
+        .select('id, first_name, last_name')
         .or(`first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%`)
         .order('first_name', { ascending: true })
         .limit(5);
       
       if (error) throw error;
       
-      // Format the user data
+      // Format the user data without trying to access auth_users
       const formattedUsers = (userProfiles || []).map((user) => {
         return {
           id: user.id,
           name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'User',
-          email: user.auth_users?.email || null
+          email: null // We don't have access to email through client-side queries
         };
       });
       
@@ -208,7 +207,7 @@ const UserSearch = ({ onUserSelect, selectedUser }: UserSearchProps) => {
                 <SelectItem key={user.id} value={user.id}>
                   <div className="flex items-center space-x-2">
                     <User className="w-4 h-4" />
-                    <span>{user.name} {user.email ? `(${user.email})` : ''}</span>
+                    <span>{user.name}</span>
                   </div>
                 </SelectItem>
               ))}

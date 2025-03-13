@@ -85,16 +85,16 @@ const TransactionForm = ({ selectedUser }: TransactionFormProps) => {
 
       // Update sender's wallet (deduct amount)
       const { error: senderWalletError } = await supabase.rpc('update_wallet_balance', {
-        user_id_param: senderId,
-        amount_param: -amountNumber
+        _user_id: senderId,
+        _amount: -amountNumber
       });
       
       if (senderWalletError) throw senderWalletError;
 
       // Update receiver's wallet (add amount)
       const { error: receiverWalletError } = await supabase.rpc('update_wallet_balance', {
-        user_id_param: receiverId,
-        amount_param: amountNumber
+        _user_id: receiverId,
+        _amount: amountNumber
       });
       
       if (receiverWalletError) throw receiverWalletError;
