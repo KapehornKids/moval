@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
@@ -9,6 +10,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle, XCircle, PlusCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 const BankerAdmin = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -20,32 +22,47 @@ const BankerAdmin = () => {
   const [loanDueDate, setLoanDueDate] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { hasRole } = useAuth();
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      setIsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name');
-
-        if (error) throw error;
-
-        setUsers(data || []);
-      } catch (error: any) {
-        console.error('Error fetching users:', error);
+    const checkAccess = async () => {
+      const hasBankerRole = await hasRole('banker');
+      if (!hasBankerRole) {
         toast({
-          title: 'Error',
-          description: error.message || 'Unable to fetch users. Please try again.',
-          variant: 'destructive',
+          title: "Access Denied",
+          description: "You don't have permission to access the Banker Admin page",
+          variant: "destructive",
         });
-      } finally {
-        setIsLoading(false);
+        navigate("/dashboard");
+      } else {
+        fetchUsers();
       }
     };
 
-    fetchUsers();
-  }, []);
+    checkAccess();
+  }, [navigate, hasRole]);
+
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name');
+
+      if (error) throw error;
+
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Unable to fetch users. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -85,8 +102,8 @@ const BankerAdmin = () => {
 
       // Update wallet balance
       const { error: walletError } = await supabase.rpc('update_wallet_balance', {
-        user_id_param: selectedUser,
-        amount_param: amountNumber
+        _user_id: selectedUser,
+        _amount: amountNumber
       });
 
       if (walletError) throw walletError;
@@ -147,8 +164,8 @@ const BankerAdmin = () => {
 
       // Update wallet balance
       const { error: walletError } = await supabase.rpc('update_wallet_balance', {
-        user_id_param: selectedUser,
-        amount_param: amountNumber
+        _user_id: selectedUser,
+        _amount: amountNumber
       });
 
       if (walletError) throw walletError;

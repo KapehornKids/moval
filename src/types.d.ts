@@ -11,13 +11,16 @@ export interface NavItem {
 
 export interface User {
   id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  walletBalance: number;
-  roles: AppRole[];
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  walletBalance?: number;
+  roles?: AppRole[];
   name?: string;
   role?: string;
+  first_name?: string;
+  last_name?: string;
+  user_roles?: { role: string }[];
 }
 
 export interface UserRole {

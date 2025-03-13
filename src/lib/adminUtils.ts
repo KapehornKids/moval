@@ -7,20 +7,21 @@ export async function setupInitialAdminAndElections() {
     // Email for the admin user
     const adminEmail = "kumarapoorva120021@gmail.com";
     
-    // Find the user by email
+    // Find the user by email - using profiles table
     const { data: userQuery, error: userQueryError } = await supabase
       .from('profiles')
       .select('id')
-      .eq('email', adminEmail)
+      .eq('first_name', 'Apoorva')
+      .eq('last_name', 'Krishna')
       .maybeSingle();
     
     if (userQueryError) {
       console.error("User lookup error:", userQueryError);
-      return { success: false, message: "User not found. Please make sure the admin email is registered." };
+      return { success: false, message: "User not found. Please make sure the admin is registered." };
     }
     
     if (!userQuery?.id) {
-      return { success: false, message: "User not found. Please make sure the admin email is registered." };
+      return { success: false, message: "User not found. Please make sure the admin is registered." };
     }
     
     const userId = userQuery.id;

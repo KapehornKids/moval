@@ -1,6 +1,6 @@
 
 -- Function to update a user's wallet balance
-CREATE OR REPLACE FUNCTION public.update_wallet_balance(user_id_param UUID, amount_param NUMERIC)
+CREATE OR REPLACE FUNCTION public.update_wallet_balance(_user_id UUID, _amount NUMERIC)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -10,8 +10,8 @@ BEGIN
   -- Update the user's wallet balance
   UPDATE public.wallets
   SET 
-    balance = balance + amount_param,
+    balance = balance + _amount,
     updated_at = now()
-  WHERE user_id = user_id_param;
+  WHERE user_id = _user_id;
 END;
 $$;
