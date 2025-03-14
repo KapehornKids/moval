@@ -51,7 +51,7 @@ export const getHeaderItems = (): NavItem[] => {
       ]
     },
     {
-      title: 'Admin',
+      title: 'Administration',
       children: [
         {
           title: 'Association',
@@ -74,7 +74,7 @@ export const getHeaderItems = (): NavItem[] => {
           roles: ['banker']
         },
         {
-          title: 'Users',
+          title: 'Users Management',
           href: '/users',
           roles: ['association_member']
         },

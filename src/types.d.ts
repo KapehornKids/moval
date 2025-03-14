@@ -39,9 +39,10 @@ export interface UserWithRoles {
 export interface Dispute {
   id: string;
   created_at: string;
+  updated_at?: string;
   complainant_id: string;
   respondent_id: string;
-  amount: number;
+  amount?: number;
   status: 'pending' | 'resolved' | 'rejected' | 'dismissed' | 'in_review';
   transaction_id?: string;
   description: string;
@@ -51,4 +52,12 @@ export interface Dispute {
   respondent_name?: string;
   evidence?: string;
   ruled_by?: string;
+  complainant?: {
+    first_name?: string;
+    last_name?: string;
+  };
+  respondent?: {
+    first_name?: string;
+    last_name?: string;
+  };
 }
