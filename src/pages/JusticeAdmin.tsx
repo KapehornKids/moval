@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
@@ -60,8 +59,8 @@ const JusticeAdmin = () => {
         .from('disputes')
         .select(`
           *,
-          complainant:complainant_id(first_name, last_name),
-          respondent:respondent_id(first_name, last_name)
+          complainant:profiles!complainant_id(first_name, last_name),
+          respondent:profiles!respondent_id(first_name, last_name)
         `)
         .order('created_at', { ascending: false });
 
@@ -75,13 +74,10 @@ const JusticeAdmin = () => {
           updated_at: dispute.updated_at,
           complainant_id: dispute.complainant_id,
           respondent_id: dispute.respondent_id,
-          amount: dispute.amount || 0,
           status: dispute.status as 'pending' | 'in_review' | 'resolved' | 'rejected' | 'dismissed',
-          transaction_id: dispute.transaction_id || '',
           description: dispute.description,
-          resolution: dispute.resolution || '',
-          ruling: dispute.ruling || '',
           evidence: dispute.evidence || '',
+          ruling: dispute.ruling || '',
           ruled_by: dispute.ruled_by || '',
           complainant_name: dispute.complainant?.first_name && dispute.complainant?.last_name 
             ? `${dispute.complainant.first_name} ${dispute.complainant.last_name}`

@@ -1,4 +1,3 @@
-
 export type AppRole = 'user' | 'banker' | 'association_member' | 'justice_department';
 
 export interface NavItem {
@@ -39,7 +38,7 @@ export interface UserWithRoles {
 export interface Dispute {
   id: string;
   created_at: string;
-  updated_at?: string;
+  updated_at: string;
   complainant_id: string;
   respondent_id: string;
   amount?: number;
@@ -48,10 +47,10 @@ export interface Dispute {
   description: string;
   resolution?: string;
   ruling?: string;
-  complainant_name?: string;
-  respondent_name?: string;
   evidence?: string;
   ruled_by?: string;
+  complainant_name?: string;
+  respondent_name?: string;
   complainant?: {
     first_name?: string;
     last_name?: string;
