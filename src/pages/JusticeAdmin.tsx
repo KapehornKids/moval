@@ -76,7 +76,7 @@ const JusticeAdmin = () => {
           complainant_id: dispute.complainant_id,
           respondent_id: dispute.respondent_id,
           amount: dispute.amount || 0,
-          status: dispute.status,
+          status: dispute.status as 'pending' | 'in_review' | 'resolved' | 'rejected' | 'dismissed',
           transaction_id: dispute.transaction_id || '',
           description: dispute.description,
           resolution: dispute.resolution || '',
@@ -88,7 +88,15 @@ const JusticeAdmin = () => {
             : 'Unknown User',
           respondent_name: dispute.respondent?.first_name && dispute.respondent?.last_name
             ? `${dispute.respondent.first_name} ${dispute.respondent.last_name}`
-            : 'Unknown User'
+            : 'Unknown User',
+          complainant: {
+            first_name: dispute.complainant?.first_name,
+            last_name: dispute.complainant?.last_name
+          },
+          respondent: {
+            first_name: dispute.respondent?.first_name,
+            last_name: dispute.respondent?.last_name
+          }
         };
         return formattedDispute;
       });
@@ -278,7 +286,7 @@ const JusticeAdmin = () => {
                           <div className="flex flex-wrap gap-2 mt-4">
                             <ButtonCustom 
                               size="sm"
-                              variant="default"
+                              variant="primary"
                               onClick={() => updateDisputeStatus(dispute.id, 'resolved', 'Resolved in favor of complainant.')}
                             >
                               <CheckCircle className="h-4 w-4 mr-2" />

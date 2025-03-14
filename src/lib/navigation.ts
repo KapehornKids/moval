@@ -51,17 +51,16 @@ export const getHeaderItems = (): NavItem[] => {
       ]
     },
     {
+      title: 'Justice',
+      href: '/justice',
+    },
+    {
       title: 'Administration',
       children: [
         {
           title: 'Association',
           href: '/association',
           roles: ['association_member']
-        },
-        {
-          title: 'Justice',
-          href: '/justice',
-          roles: ['justice_department']
         },
         {
           title: 'Justice Admin',
