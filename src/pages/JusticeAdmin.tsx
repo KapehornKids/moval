@@ -45,47 +45,51 @@ const JusticeAdmin = () => {
     try {
       setIsLoading(true);
       
+      // Get disputes with complainant and respondent information
       const { data, error } = await supabase
         .from('disputes')
         .select(`
-          id,
-          created_at,
-          status,
-          description,
+          *,
           complainant:complainant_id(
-            profiles(first_name, last_name)
+            id,
+            first_name,
+            last_name
           ),
           respondent:respondent_id(
-            profiles(first_name, last_name)
-          ),
-          transaction_id,
-          ruling,
-          complainant_id,
-          respondent_id
+            id,
+            first_name,
+            last_name
+          )
         `)
         .order('created_at', { ascending: false });
         
       if (error) throw error;
       
-      // Process the disputes to match our type
-      const processedDisputes = data?.map(item => ({
-        id: item.id,
-        created_at: item.created_at,
-        complainant_id: item.complainant_id,
-        respondent_id: item.respondent_id,
-        status: item.status as 'pending' | 'resolved' | 'rejected',
-        transaction_id: item.transaction_id || '',
-        description: item.description,
-        ruling: item.ruling || undefined,
-        complainant_name: item.complainant?.profiles ? 
-          `${item.complainant.profiles.first_name} ${item.complainant.profiles.last_name}` : 
-          'Unknown',
-        respondent_name: item.respondent?.profiles ? 
-          `${item.respondent.profiles.first_name} ${item.respondent.profiles.last_name}` : 
-          'Unknown'
-      }));
-      
-      setDisputes(processedDisputes || []);
+      if (data) {
+        // Process the disputes to match our Dispute type
+        const processedDisputes: Dispute[] = data.map(item => ({
+          id: item.id,
+          created_at: item.created_at,
+          complainant_id: item.complainant_id,
+          respondent_id: item.respondent_id,
+          status: item.status as 'pending' | 'resolved' | 'rejected',
+          transaction_id: item.transaction_id || '',
+          description: item.description,
+          ruling: item.ruling,
+          resolution: item.resolution,
+          amount: 0, // Use a default value since it's required in the type
+          complainant_name: item.complainant ? 
+            `${item.complainant.first_name || ''} ${item.complainant.last_name || ''}`.trim() : 
+            'Unknown',
+          respondent_name: item.respondent ? 
+            `${item.respondent.first_name || ''} ${item.respondent.last_name || ''}`.trim() : 
+            'Unknown',
+          evidence: item.evidence,
+          ruled_by: item.ruled_by
+        }));
+        
+        setDisputes(processedDisputes);
+      }
     } catch (error) {
       console.error('Error fetching disputes:', error);
       toast({
@@ -302,6 +306,7 @@ const JusticeAdmin = () => {
                 <h3 className="font-medium mb-2">Evidence</h3>
                 <div className="p-4 rounded-lg bg-white/5">
                   <p>Transaction ID: {selectedDispute.transaction_id || 'Not provided'}</p>
+                  {selectedDispute.evidence && <p className="mt-2">{selectedDispute.evidence}</p>}
                 </div>
               </div>
               

@@ -42,9 +42,13 @@ export interface Dispute {
   complainant_id: string;
   respondent_id: string;
   amount: number;
-  status: 'pending' | 'resolved' | 'rejected';
-  transaction_id: string;
+  status: 'pending' | 'resolved' | 'rejected' | 'dismissed' | 'in_review';
+  transaction_id?: string;
   description: string;
   resolution?: string;
   ruling?: string;
+  complainant_name?: string;
+  respondent_name?: string;
+  evidence?: string;
+  ruled_by?: string;
 }
