@@ -29,7 +29,7 @@ const Layout = ({
       <div className="absolute inset-0 bg-mesh-gradient pointer-events-none z-0"></div>
       <div className="absolute inset-0 bg-grain pointer-events-none z-0"></div>
       <Header transparentBg={transparentHeader} />
-      <main className={`flex-1 pt-20 relative z-10 ${className}`}>{children}</main>
+      <main className={`flex-1 pt-16 relative z-10 ${className}`}>{children}</main>
       {showFooter && <Footer />}
     </div>
   );

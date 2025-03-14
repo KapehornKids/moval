@@ -1,3 +1,4 @@
+
 export type AppRole = 'user' | 'banker' | 'association_member' | 'justice_department';
 
 export interface NavItem {

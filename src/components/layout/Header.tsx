@@ -1,21 +1,25 @@
 
-import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
-import { ButtonCustom } from '@/components/ui/button-custom';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { getHeaderItems } from '@/lib/navigation';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+  Avatar, 
+  AvatarFallback, 
+  AvatarImage 
+} from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, User, Settings, Wallet, Shield } from 'lucide-react';
+import { ButtonCustom } from '@/components/ui/button-custom';
+import MainNav from './MainNav';
+import { cn } from '@/lib/utils';
 
 interface HeaderProps {
   transparentBg?: boolean;
@@ -23,11 +27,8 @@ interface HeaderProps {
 
 const Header = ({ transparentBg = false }: HeaderProps) => {
   const [scrolled, setScrolled] = useState(false);
-  const location = useLocation();
-  const isMobile = useIsMobile();
   const { isAuthenticated, user, logout } = useAuth();
-  
-  const isHomePage = location.pathname === '/';
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -35,8 +36,6 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
     };
     
     window.addEventListener('scroll', handleScroll);
-    
-    // Check initial scroll position
     handleScroll();
     
     return () => {
@@ -44,48 +43,40 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
     };
   }, []);
 
-  const navigationItems = getHeaderItems();
-  
   // Get user's initials for avatar
   const getUserInitials = () => {
     if (!user) return "U";
-    // Use firstName/lastName if available, otherwise fallback to name or first character of email
-    const first = user.firstName || (user.name ? user.name.split(' ')[0] : '');
-    const last = user.lastName || (user.name ? user.name.split(' ')[1] || '' : '');
     
-    return `${first.charAt(0) || ''}${last.charAt(0) || ''}`.toUpperCase() || user.email.charAt(0).toUpperCase();
-  };
-
-  // Check if user has admin roles
-  const hasAdminRole = () => {
-    if (!user) return false;
-    const adminRoles: string[] = ['banker', 'association_member', 'justice_department'];
-    return user.roles.some(role => adminRoles.includes(role));
+    const first = user.firstName || user.first_name || (user.name ? user.name.split(' ')[0] : '');
+    const last = user.lastName || user.last_name || (user.name ? user.name.split(' ')[1] || '' : '');
+    
+    return `${first.charAt(0) || ''}${last.charAt(0) || ''}`.toUpperCase() || 
+           (user.email ? user.email.charAt(0).toUpperCase() : 'U');
   };
 
   return (
     <header
-      className={`
-        fixed top-0 left-0 right-0 z-40 transition-all duration-300
-        ${scrolled || !isHomePage || !transparentBg 
-          ? 'bg-background/90 backdrop-blur-xl border-b border-border/50 py-3'
-          : 'bg-transparent py-5'}
-      `}
+      className={cn(
+        "fixed top-0 left-0 right-0 z-40 transition-all duration-300",
+        scrolled || !transparentBg 
+          ? "bg-background/90 backdrop-blur-md border-b border-border/50 py-2" 
+          : "bg-transparent py-4"
+      )}
     >
       <div className="container flex items-center justify-between px-4 md:px-6">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 md:gap-6">
           <Link to="/" className="flex items-center">
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent tracking-tight">Moval</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">Moval</span>
           </Link>
           
-          <Navbar items={navigationItems} />
+          {!isMobile && <MainNav />}
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 rounded-full hover:bg-accent/50 p-1 px-2 transition-colors">
+                <button className="flex items-center gap-2 rounded-full p-1 px-2 transition-colors hover:bg-accent/50">
                   <Avatar className="h-8 w-8 border border-border">
                     <AvatarImage src="" />
                     <AvatarFallback className="bg-primary/10 text-primary">
@@ -93,7 +84,7 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden md:inline text-sm font-medium">
-                    {user?.firstName || user?.name || 'Account'}
+                    {user?.firstName || user?.first_name || user?.name || 'Account'}
                   </span>
                 </button>
               </DropdownMenuTrigger>
@@ -104,45 +95,6 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
                   <Link to="/profile" className="cursor-pointer flex items-center gap-2">
                     <User className="h-4 w-4" />
                     <span>Profile</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/dashboard" className="cursor-pointer flex items-center gap-2">
-                    <Wallet className="h-4 w-4" />
-                    <span>Dashboard</span>
-                  </Link>
-                </DropdownMenuItem>
-                
-                {hasAdminRole() && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Administration</DropdownMenuLabel>
-                    
-                    {user?.roles.includes('association_member') && (
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin-setup" className="cursor-pointer flex items-center gap-2">
-                          <Shield className="h-4 w-4" />
-                          <span>Admin Setup</span>
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                    
-                    {user?.roles.includes('justice_department') && (
-                      <DropdownMenuItem asChild>
-                        <Link to="/justice-admin" className="cursor-pointer flex items-center gap-2">
-                          <Shield className="h-4 w-4" />
-                          <span>Justice Admin</span>
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                  </>
-                )}
-                
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/settings" className="cursor-pointer flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -159,7 +111,7 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
             <div className="flex items-center gap-2">
               <Link to="/login">
                 <ButtonCustom
-                  variant={isHomePage && transparentBg && !scrolled ? "glass" : "outline"}
+                  variant={transparentBg && !scrolled ? "glass" : "outline"}
                   size="sm"
                 >
                   Log In
@@ -167,18 +119,54 @@ const Header = ({ transparentBg = false }: HeaderProps) => {
               </Link>
               <div className="hidden md:block">
                 <Link to="/register">
-                  <ButtonCustom
-                    size="sm"
-                  >
+                  <ButtonCustom size="sm">
                     Register
                   </ButtonCustom>
                 </Link>
               </div>
             </div>
           )}
+          
+          {isMobile && (
+            <MobileNavTrigger />
+          )}
         </div>
       </div>
     </header>
+  );
+};
+
+// Mobile Navigation Trigger
+const MobileNavTrigger = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="p-2 rounded-md text-foreground hover:bg-accent/50 ml-2"
+        aria-label="Toggle menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+      
+      <div className={cn(
+        "fixed inset-0 bg-background/95 backdrop-blur-lg z-50 transition-transform duration-300",
+        isOpen ? "translate-x-0" : "translate-x-full"
+      )}>
+        <div className="p-4 flex justify-end">
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-2 rounded-md text-foreground hover:bg-accent/50"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="px-4 py-6">
+          <MainNav isMobile onNavItemClick={() => setIsOpen(false)} />
+        </div>
+      </div>
+    </>
   );
 };
 
